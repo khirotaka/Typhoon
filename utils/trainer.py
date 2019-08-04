@@ -2,6 +2,8 @@ import sys
 from comet_ml import Experiment
 
 import torch
+import termcolor
+import torch.nn as nn
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
@@ -78,9 +80,19 @@ class NeuralNetworkClassifier:
         self.experiment = Experiment(**comet_config)
 
         self._tb = False
+        self._is_parallel = False
+
         if log_dir:
             self.writer = SummaryWriter(log_dir=log_dir)
             self._tb = True
+
+        if torch.cuda.device_count() > 1:
+            self.model = nn.DataParallel(self.model)
+            self._is_parallel = True
+
+            notice = "Running on {} GPUs.".format(torch.cuda.device_count())
+            notice = termcolor.colored(notice, "green")
+            print(notice)
 
     def fit(self, loader: DataLoader, epochs: int) -> None:
         """
@@ -201,7 +213,10 @@ class NeuralNetworkClassifier:
         :param path: path to save directory. : str
         :return: None
         """
-        torch.save(self.model.state_dict(), path)
+        if self._is_parallel:
+            torch.save(self.model.module.state_dict(), path)
+        else:
+            torch.save(self.model.state_dict(), path)
 
     def load_weight(self, path: str) -> None:
         """
