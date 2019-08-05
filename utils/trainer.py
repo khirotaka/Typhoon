@@ -5,7 +5,6 @@ import torch
 import termcolor
 import torch.nn as nn
 from torch.utils.data import DataLoader
-from torch.utils.tensorboard import SummaryWriter
 
 
 class NeuralNetworkClassifier:
@@ -48,30 +47,8 @@ class NeuralNetworkClassifier:
 
     ----------------------------------------------------------
 
-    ====================== EXPERIMENTAL ======================
-    Warning, This option is now experimental.
-
-    If your want to check graph of your model,
-    setting a logs directory and assign when you define NeuralNetworkClassifier.
-
-    ----------------------------------------------------------
-    from Typhoon.utils.trainer import NeuralNetworkClassifier
-
-    clf = NeuralNetworkClassifier(
-            Network(), nn.CrossEntropyLoss(),
-            optim.Adam, optimizer_config,
-            log_dir='logs/'
-        )
-
-    clf.fit(train_loader, epochs=10)
-    ----------------------------------------------------------
-
-    After that, run TensorBoard and check your model.
-
-    > user@user$ tensorboard --logdir=logs/
-
     """
-    def __init__(self, model, criterion, optimizer, optimizer_config: dict, comet_config: dict, log_dir=None) -> None:
+    def __init__(self, model, criterion, optimizer, optimizer_config: dict, comet_config: dict) -> None:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = model.to(self.device)
         self.optimizer = optimizer(model.parameters(), **optimizer_config)
@@ -82,10 +59,6 @@ class NeuralNetworkClassifier:
 
         self._tb = False
         self._is_parallel = False
-
-        if isinstance(log_dir, str):
-            self.writer = SummaryWriter(log_dir=log_dir)
-            self._tb = True
 
         if torch.cuda.device_count() > 1:
             self.model = nn.DataParallel(self.model)
@@ -129,9 +102,6 @@ class NeuralNetworkClassifier:
                     x = x.to(self.device)
                     y = y.to(self.device)
 
-                    if self._tb and (batch == 0 and epoch == 0):
-                        self.writer.add_graph(self.model, x)
-
                     sys.stdout.write(
                         "\rTraining - Epochs: {:03d}/{:03d} - {:.3%} ".format(
                             epoch + 1, epochs, ((batch_size * (batch + 1)) / len_of_dataset)
@@ -153,9 +123,6 @@ class NeuralNetworkClassifier:
                     self.optimizer.step()
 
             sys.stdout.write("\n")
-
-        if self._tb:
-            self.writer.close()
 
     def evaluate(self, loader: DataLoader) -> None:
         """
