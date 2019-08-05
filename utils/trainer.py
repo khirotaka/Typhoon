@@ -2,6 +2,8 @@ import sys
 from comet_ml import Experiment
 
 import torch
+import termcolor
+import torch.nn as nn
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
@@ -37,9 +39,10 @@ class NeuralNetworkClassifier:
     clf.evaluate(test_loader)
     ----------------------------------------------------------
 
-    2nd, Run code on your shell with Google Fire.
-
-    > user@user$ python code.py --api_key="YOUR-API-KEY" --project_name="YOUR-PROJECT_NAME"
+    2nd, Run code on your shell.
+    > export COMET_API_KEY="YOUR-API-KEY"
+    > export COMET_PROJECT_NAME="YOUR-PROJECT-NAME"
+    > user@user$ python code.py
 
     3rd, check logs on your workspace of comet.
 
@@ -57,13 +60,13 @@ class NeuralNetworkClassifier:
     clf = NeuralNetworkClassifier(
             Network(), nn.CrossEntropyLoss(),
             optim.Adam, optimizer_config,
-            log_dir="logs/"
+            log_dir='logs/'
         )
 
     clf.fit(train_loader, epochs=10)
     ----------------------------------------------------------
 
-    After that, run tensorboard and check your model.
+    After that, run TensorBoard and check your model.
 
     > user@user$ tensorboard --logdir=logs/
 
@@ -78,9 +81,19 @@ class NeuralNetworkClassifier:
         self.experiment = Experiment(**comet_config)
 
         self._tb = False
-        if log_dir:
+        self._is_parallel = False
+
+        if isinstance(log_dir, str):
             self.writer = SummaryWriter(log_dir=log_dir)
             self._tb = True
+
+        if torch.cuda.device_count() > 1:
+            self.model = nn.DataParallel(self.model)
+            self._is_parallel = True
+
+            notice = "Running on {} GPUs.".format(torch.cuda.device_count())
+            notice = termcolor.colored(notice, "green")
+            print(notice)
 
     def fit(self, loader: DataLoader, epochs: int) -> None:
         """
@@ -91,7 +104,7 @@ class NeuralNetworkClassifier:
         ---------------------------------------------------------
         clf = NeuralNetworkClassifier(
                 Network(), nn.CrossEntropyLoss(),
-                optim.Adam, optimizer_config, log_dir='logs/'
+                optim.Adam, optimizer_config
             )
         clf.fit(train_loader, epochs=10)
         ---------------------------------------------------------
@@ -116,7 +129,7 @@ class NeuralNetworkClassifier:
                     x = x.to(self.device)
                     y = y.to(self.device)
 
-                    if self._tb and batch == 0 and epoch == 0:
+                    if self._tb and (batch == 0 and epoch == 0):
                         self.writer.add_graph(self.model, x)
 
                     sys.stdout.write(
@@ -151,7 +164,7 @@ class NeuralNetworkClassifier:
         ---------------------------------------------------------
         clf = NeuralNetworkClassifier(
                 Network(), nn.CrossEntropyLoss(),
-                optim.Adam, optimizer_config, log_dir='logs/'
+                optim.Adam, optimizer_config
             )
         clf.evaluate(test_loader)
         ---------------------------------------------------------
@@ -192,7 +205,7 @@ class NeuralNetworkClassifier:
         ---------------------------------------------------------
         clf = NeuralNetworkClassifier(
                 Network(), nn.CrossEntropyLoss(),
-                optim.Adam, optimizer_config, log_dir='logs/'
+                optim.Adam, optimizer_config
             )
         clf.fit(train_loader, epochs=10)
         clf.save_weights('path/to/save/dir/and/filename.pth')
@@ -201,7 +214,10 @@ class NeuralNetworkClassifier:
         :param path: path to save directory. : str
         :return: None
         """
-        torch.save(self.model.state_dict(), path)
+        if self._is_parallel:
+            torch.save(self.model.module.state_dict(), path)
+        else:
+            torch.save(self.model.state_dict(), path)
 
     def load_weight(self, path: str) -> None:
         """
@@ -210,7 +226,7 @@ class NeuralNetworkClassifier:
         ---------------------------------------------------------
         clf = NeuralNetworkClassifier(
                 Network(), nn.CrossEntropyLoss(),
-                optim.Adam, optimizer_config, log_dir='logs/'
+                optim.Adam, optimizer_config
             )
         clf.load_weight('path/to/trained/weights.pth')
         ---------------------------------------------------------
