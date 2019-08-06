@@ -1,36 +1,22 @@
 # Typhoon
 Transformer based neural network model for time series tasks.
 
-## Utilities
-
-```python
-from Typhoon.utils.trainer import NeuralNetworkClassifier
-
-import torch
-import torch.nn as nn
-import torch.optim as optim
-from torch.utils.data import DataLoader
-
-class Network(nn.Module):
-    def __init__(self):
-        super(Network, self).__init__()
-        self.fc1 = nn.Linear(4, 1)
-        self.fc2 = nn.Linear(4, 1)
-    
-    def forward(self, x):
-        x = self.fc1(x)
-        x = torch.relu(x)
-        return self.fc2(x)
-
-train_loader = DataLoader(...)
-
-optim_confg = {"lr": 0.01}
-comet_config = {"api_key": "YOUR-API-KEY", "project_name": "YOUR-PROJECT_NAME"}
-
-clf = NeuralNetworkClassifier(Network(), nn.BCELoss(), optim.SGD, optim_confg, comet_config)
-clf.fit(train_loader, epochs=20)
+## Structure
 
 ```
+Typhoon/
+    ├── LICENSE
+    ├── README.md
+    ├── __init__.py
+    ├── model.py
+    ├── modules.py
+    └── utils/
+        ├── __init__.py
+        ├── functions.py
+        └── trainer.py
+```
+* utils/
+    This directory contain training script and sub functions.
 
 ## References 
 * [Attention is all you need](https://arxiv.org/abs/1706.03762)
