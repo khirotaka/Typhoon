@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from Typhoon import modules
+from Typhoon.core import modules
 
 
 class EncoderLayer(nn.Module):
