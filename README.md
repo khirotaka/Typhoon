@@ -15,7 +15,7 @@ Typhoon/
         ├── functions.py
         └── trainer.py
 ```
-* utils/
+* `utils/`
     This directory contain training script and sub functions.
 
 ## References 
