@@ -1,8 +1,8 @@
 import sys
 from comet_ml import Experiment
 
+import tqdm
 import torch
-import termcolor
 import torch.nn as nn
 from torch.utils.data import DataLoader
 
@@ -57,7 +57,6 @@ class NeuralNetworkClassifier:
         self.hyper_params = optimizer_config
         self.experiment = Experiment(**comet_config)
 
-        self._tb = False
         self._is_parallel = False
 
         if torch.cuda.device_count() > 1:
@@ -65,8 +64,7 @@ class NeuralNetworkClassifier:
             self._is_parallel = True
 
             notice = "Running on {} GPUs.".format(torch.cuda.device_count())
-            notice = termcolor.colored(notice, "green")
-            print(notice)
+            print("\033[33m" + notice + "\033[0m")
 
     def fit(self, loader: DataLoader, epochs: int) -> None:
         """
@@ -98,16 +96,17 @@ class NeuralNetworkClassifier:
             for epoch in range(epochs):
                 correct = 0.0
                 total = 0.0
+
+                pbar = tqdm.tqdm(total=len_of_dataset)
                 for batch, (x, y) in enumerate(loader):
+                    b_size = x.shape[0]
                     x = x.to(self.device)
                     y = y.to(self.device)
 
-                    sys.stdout.write(
-                        "\rTraining - Epochs: {:03d}/{:03d} - {:.3%} ".format(
-                            epoch + 1, epochs, ((batch_size * (batch + 1)) / len_of_dataset)
-                        )
+                    pbar.set_description(
+                        "\033[36m" + "Training" + "\033[0m" + " - Epochs: {:03d}/{:03d}".format(epoch+1, epochs)
                     )
-                    sys.stdout.flush()
+                    pbar.update(b_size)
 
                     self.optimizer.zero_grad()
                     outputs = self.model(x)
@@ -121,8 +120,7 @@ class NeuralNetworkClassifier:
 
                     loss.backward()
                     self.optimizer.step()
-
-            sys.stdout.write("\n")
+                pbar.close()
 
     def evaluate(self, loader: DataLoader) -> None:
         """
@@ -142,14 +140,19 @@ class NeuralNetworkClassifier:
         self.model.eval()
         running_loss = 0.0
         running_corrects = 0.0
+        pbar = tqdm.tqdm(total=len(loader.dataset))
 
         with self.experiment.test():
             with torch.no_grad():
                 correct = 0
                 total = 0
                 for batch, (x, y) in enumerate(loader):
+                    b_size = x.shape[0]
                     x = x.to(self.device)
                     y = y.to(self.device)
+
+                    pbar.set_description("\033[32m"+"Evaluating"+"\033[0m")
+                    pbar.update(b_size)
 
                     outputs = self.model(x)
                     loss = self.criterion(outputs, y)
@@ -162,8 +165,11 @@ class NeuralNetworkClassifier:
 
                     self.experiment.log_metric("loss", running_loss, step=batch)
                     self.experiment.log_metric("accuracy", float(running_corrects / total), step=batch)
+                pbar.close()
 
-        print("Evaluate is finished. See your workspace https://www.comet.ml/")
+        print("\033[33m" + "="*65 + "\033[0m")
+        print("\033[33m" + "Evaluation finished. Check your workspace" + "\033[0m" + " https://www.comet.ml/")
+        print("\033[33m" + "="*65 + "\033[0m")
 
     def save_weights(self, path: str) -> None:
         """
