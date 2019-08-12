@@ -1,3 +1,4 @@
+import time
 from comet_ml import Experiment
 
 import tqdm
@@ -216,6 +217,8 @@ class NeuralNetworkClassifier:
     def save_weights(self, path: str) -> None:
         """
         The method of saving trained PyTorch model.
+        Those weights are uploaded to comet.ml as backup.
+        check "Asserts".
 
         ---------------------------------------------------------
         clf = NeuralNetworkClassifier(
@@ -223,16 +226,23 @@ class NeuralNetworkClassifier:
                 optim.Adam, optimizer_config
             )
         clf.fit(train_loader, epochs=10)
-        clf.save_weights('path/to/save/dir/and/filename.pth')
+        clf.save_weights('path/to/save/dir/')
         ---------------------------------------------------------
 
         :param path: path to save directory. : str
         :return: None
         """
+        file_name = "model_params-epochs_{}-{}.pth".format(
+            self.hyper_params["epochs"], time.ctime().replace(" ", "_")
+        )
+        path = path + file_name
+
         if self._is_parallel:
             torch.save(self.model.module.state_dict(), path)
         else:
             torch.save(self.model.state_dict(), path)
+
+        self.experiment.log_asset(path, file_name=file_name)
 
     def load_weight(self, path: str) -> None:
         """
