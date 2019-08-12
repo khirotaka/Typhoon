@@ -62,12 +62,13 @@ class NeuralNetworkClassifier:
         self.model = model.to(self.device)
         self.optimizer = optimizer(model.parameters(), **optimizer_config)
         self.criterion = criterion
+        self.experiment = Experiment(**comet_config)
 
         optimizer_config["optimizer"] = optimizer
         optimizer_config["criterion"] = criterion
 
         self.hyper_params = optimizer_config
-        self.experiment = Experiment(**comet_config)
+        self.__num_classes = None
 
         self._is_parallel = False
 
@@ -106,8 +107,6 @@ class NeuralNetworkClassifier:
         len_of_train_dataset = len(loader["train"].dataset)
         len_of_val_dataset = len(loader["val"].dataset)
 
-        global_step = 0
-
         self.hyper_params["epochs"] = epochs
         self.hyper_params["batch_size"] = loader["train"].batch_size
         self.hyper_params["train_ds_size"] = len_of_train_dataset
@@ -121,8 +120,9 @@ class NeuralNetworkClassifier:
             with self.experiment.train():
                 self.model.train()
                 pbar = tqdm.tqdm(total=len_of_train_dataset)
-                for i, (x, y) in enumerate(loader["train"]):
+                for x, y in loader["train"]:
                     b_size = x.shape[0]
+                    total += y.shape[0]
                     x = x.to(self.device)
                     y = y.to(self.device)
 
@@ -134,35 +134,33 @@ class NeuralNetworkClassifier:
                     self.optimizer.zero_grad()
                     outputs = self.model(x)
                     loss = self.criterion(outputs, y)
+                    loss.backward()
+                    self.optimizer.step()
+
                     _, predicted = torch.max(outputs, 1)
-                    total += y.shape[0]
                     correct += (predicted == y).sum().float().cpu().item()
 
                     self.experiment.log_metric("loss", loss.cpu().item(), step=epoch)
                     self.experiment.log_metric("accuracy", float(correct / total), step=epoch)
-
-                    loss.backward()
-                    self.optimizer.step()
 
                 with self.experiment.validate():
                     self.model.eval()
                     val_correct = 0.0
                     val_total = 0.0
 
-                    for j, (x_val, y_val) in enumerate(loader["val"]):
+                    for x_val, y_val in loader["val"]:
+                        val_total += y_val.shape[0]
                         x_val = x_val.to(self.device)
                         y_val = y_val.to(self.device)
 
                         val_output = self.model(x_val)
                         val_loss = self.criterion(val_output, y_val)
                         _, val_pred = torch.max(val_output, 1)
-                        val_total += y_val.shape[0]
                         val_correct += (val_pred == y_val).sum().float().cpu().item()
 
                         self.experiment.log_metric("loss", val_loss.cpu().item(), step=epoch)
                         self.experiment.log_metric("accuracy", float(val_correct / val_total), step=epoch)
 
-                global_step += 1
             pbar.close()
 
     def evaluate(self, loader: DataLoader) -> None:
@@ -190,8 +188,9 @@ class NeuralNetworkClassifier:
             with torch.no_grad():
                 correct = 0.0
                 total = 0.0
-                for batch, (x, y) in enumerate(loader):
+                for step, (x, y) in enumerate(loader):
                     b_size = x.shape[0]
+                    total += y.shape[0]
                     x = x.to(self.device)
                     y = y.to(self.device)
 
@@ -201,14 +200,13 @@ class NeuralNetworkClassifier:
                     outputs = self.model(x)
                     loss = self.criterion(outputs, y)
                     _, predicted = torch.max(outputs, 1)
-                    total += y.shape[0]
-                    correct += (predicted == y).sum()
+                    correct += (predicted == y).sum().float().cpu().item()
 
-                    running_loss += loss.item()
-                    running_corrects += torch.sum(predicted == y).item()
+                    running_loss += loss.cpu().item()
+                    running_corrects += torch.sum(predicted == y).float().cpu().item()
 
-                    self.experiment.log_metric("loss", running_loss, step=batch)
-                    self.experiment.log_metric("accuracy", float(running_corrects / total), step=batch)
+                    self.experiment.log_metric("loss", running_loss, step=step)
+                    self.experiment.log_metric("accuracy", float(running_corrects / total), step=step)
                 pbar.close()
 
         print("\033[33m" + "="*65 + "\033[0m")
@@ -253,3 +251,13 @@ class NeuralNetworkClassifier:
         """
         map_location = None if torch.cuda.is_available() else "cpu"
         self.model.load_state_dict(torch.load(path, map_location=map_location))
+
+    @property
+    def num_classes(self) -> int or None:
+        return self.__num_classes
+
+    @num_classes.setter
+    def num_classes(self, num_class: int) -> None:
+        assert isinstance(num_class, int) and num_class > 0, "the number of classes must be greater than 0."
+        self.__num_classes = num_class
+        self.experiment.log_parameter("classes", self.__num_classes)
