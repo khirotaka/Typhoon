@@ -30,15 +30,27 @@ class NeuralNetworkClassifier:
         def forward(self, x):
             ...
 
-    optimizer_config = {"lr": 0.001, "betas": , "eps"}
+    optimizer_config = {"lr": 0.001, "betas":( 0.9, 0.999), "eps": 1e-08}
     comet_config = {}
+
+    train_val_loader = {
+        "train": train_loader,
+        "val": val_loader
+    }
+    test_loader = DataLoader(test_ds, batch_size)
 
     clf = NeuralNetworkClassifier(
             Network(), nn.CrossEntropyLoss(),
             optim.Adam, optimizer_config, comet_config
         )
+
+    clf.experiment_tag = "experiment_tag"
+    clf.num_classes = 3
     clf.fit(train_val_loader, epochs=10)
     clf.evaluate(test_loader)
+    clf.confusion_matrix(test_ds)
+
+    clf.save_weights("save_params_test/")
     ----------------------------------------------------------
 
     2nd, Run code on your shell.
