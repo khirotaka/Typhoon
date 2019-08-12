@@ -1,10 +1,12 @@
 import time
+import tqdm
+import pandas as pd
 from comet_ml import Experiment
 
-import tqdm
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
+from sklearn.metrics import confusion_matrix
 
 
 class NeuralNetworkClassifier:
@@ -115,10 +117,10 @@ class NeuralNetworkClassifier:
         self.experiment.log_parameters(self.hyper_params)
 
         for epoch in range(epochs):
-            correct = 0.0
-            total = 0.0
-
             with self.experiment.train():
+                correct = 0.0
+                total = 0.0
+
                 self.model.train()
                 pbar = tqdm.tqdm(total=len_of_train_dataset)
                 for x, y in loader["train"]:
@@ -144,23 +146,23 @@ class NeuralNetworkClassifier:
                     self.experiment.log_metric("loss", loss.cpu().item(), step=epoch)
                     self.experiment.log_metric("accuracy", float(correct / total), step=epoch)
 
-                with self.experiment.validate():
-                    self.model.eval()
-                    val_correct = 0.0
-                    val_total = 0.0
+            with self.experiment.validate():
+                val_correct = 0.0
+                val_total = 0.0
 
-                    for x_val, y_val in loader["val"]:
-                        val_total += y_val.shape[0]
-                        x_val = x_val.to(self.device)
-                        y_val = y_val.to(self.device)
+                self.model.eval()
+                for x_val, y_val in loader["val"]:
+                    val_total += y_val.shape[0]
+                    x_val = x_val.to(self.device)
+                    y_val = y_val.to(self.device)
 
-                        val_output = self.model(x_val)
-                        val_loss = self.criterion(val_output, y_val)
-                        _, val_pred = torch.max(val_output, 1)
-                        val_correct += (val_pred == y_val).sum().float().cpu().item()
+                    val_output = self.model(x_val)
+                    val_loss = self.criterion(val_output, y_val)
+                    _, val_pred = torch.max(val_output, 1)
+                    val_correct += (val_pred == y_val).sum().float().cpu().item()
 
-                        self.experiment.log_metric("loss", val_loss.cpu().item(), step=epoch)
-                        self.experiment.log_metric("accuracy", float(val_correct / val_total), step=epoch)
+                    self.experiment.log_metric("loss", val_loss.cpu().item(), step=epoch)
+                    self.experiment.log_metric("accuracy", float(val_correct / val_total), step=epoch)
 
             pbar.close()
 
@@ -210,9 +212,7 @@ class NeuralNetworkClassifier:
                     self.experiment.log_metric("accuracy", float(running_corrects / total), step=step)
                 pbar.close()
 
-        print("\033[33m" + "="*65 + "\033[0m")
         print("\033[33m" + "Evaluation finished. Check your workspace" + "\033[0m" + " https://www.comet.ml/")
-        print("\033[33m" + "="*65 + "\033[0m")
 
     def save_weights(self, path: str) -> None:
         """
@@ -263,6 +263,15 @@ class NeuralNetworkClassifier:
         self.model.load_state_dict(torch.load(path, map_location=map_location))
 
     @property
+    def experiment_tag(self) -> list:
+        return self.experiment.get_tags()
+
+    @experiment_tag.setter
+    def experiment_tag(self, tag: str) -> None:
+        assert isinstance(tag, str)
+        self.experiment.add_tag(tag)
+
+    @property
     def num_classes(self) -> int or None:
         return self.__num_classes
 
@@ -271,3 +280,30 @@ class NeuralNetworkClassifier:
         assert isinstance(num_class, int) and num_class > 0, "the number of classes must be greater than 0."
         self.__num_classes = num_class
         self.experiment.log_parameter("classes", self.__num_classes)
+
+    def confusion_matrix(self, dataset: torch.utils.data.Dataset, labels=None, sample_weight=None) -> None:
+        loader = DataLoader(dataset, batch_size=1, shuffle=False)
+        pbar = tqdm.tqdm(total=len(loader.dataset))
+
+        predicts = []
+        targets = []
+        with torch.no_grad():
+            for step, (x, y) in enumerate(loader):
+                x = x.to(self.device)
+
+                pbar.set_description("\033[31m" + "Calculating confusion matrix" + "\033[0m")
+                pbar.update(step)
+
+                outputs = self.model(x)
+                _, predicted = torch.max(outputs, 1)
+
+                predicts.append(predicted.cpu().numpy())
+                targets.append(y.numpy())
+            pbar.close()
+
+        cm = pd.DataFrame(confusion_matrix(targets, predicts, labels, sample_weight))
+        self.experiment.log_asset_data(
+            cm.to_csv(), "ConfusionMatrix-epochs-{}-{}.csv".format(
+                self.hyper_params["epochs"], time.ctime().replace(" ", "_")
+            )
+        )
