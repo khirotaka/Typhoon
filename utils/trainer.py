@@ -1,4 +1,3 @@
-import sys
 from comet_ml import Experiment
 
 import tqdm
@@ -29,12 +28,13 @@ class NeuralNetworkClassifier:
             ...
 
     optimizer_config = {"lr": 0.001, "betas": , "eps"}
+    comet_config = {}
 
     clf = NeuralNetworkClassifier(
             Network(), nn.CrossEntropyLoss(),
-            optim.Adam, optimizer_config
+            optim.Adam, optimizer_config, comet_config
         )
-    clf.fit(train_loader, epochs=10)
+    clf.fit(train_val_loader, epochs=10)
     clf.evaluate(test_loader)
     ----------------------------------------------------------
 
@@ -45,6 +45,15 @@ class NeuralNetworkClassifier:
 
     3rd, check logs on your workspace of comet.
 
+    Note,
+    Execute this command on your shell,
+
+    > export COMET_DISABLE_AUTO_LOGGING=1
+
+    If the following error occurs.
+
+    ImportError: You must import Comet before these modules: torch
+
     ----------------------------------------------------------
 
     """
@@ -53,6 +62,9 @@ class NeuralNetworkClassifier:
         self.model = model.to(self.device)
         self.optimizer = optimizer(model.parameters(), **optimizer_config)
         self.criterion = criterion
+
+        optimizer_config["optimizer"] = optimizer
+        optimizer_config["criterion"] = criterion
 
         self.hyper_params = optimizer_config
         self.experiment = Experiment(**comet_config)
@@ -66,39 +78,50 @@ class NeuralNetworkClassifier:
             notice = "Running on {} GPUs.".format(torch.cuda.device_count())
             print("\033[33m" + notice + "\033[0m")
 
-    def fit(self, loader: DataLoader, epochs: int) -> None:
+    def fit(self, loader: dict, epochs: int) -> None:
         """
         The method of training your PyTorch Model.
         With the assumption, This method use for training network for classification.
-        This is automatically logging a Network Graph using TensorBoard, Hyper Parameters, Losses, and Accuracy.
 
         ---------------------------------------------------------
+        train_ds = Subset(train_val_ds, train_index)
+        val_ds = Subset(train_val_ds, val_index)
+
+        train_val_loader = {
+            "train": DataLoader(train_ds, batch_size),
+            "val": DataLoader(val_ds, batch_size)
+        }
+
         clf = NeuralNetworkClassifier(
                 Network(), nn.CrossEntropyLoss(),
                 optim.Adam, optimizer_config
             )
-        clf.fit(train_loader, epochs=10)
+        clf.fit(train_val_loader, epochs=10)
         ---------------------------------------------------------
 
-        :param loader: DataLoader for Training  : torch.utils.data.DataLoader
+        :param loader: Dictionary which contains Data Loaders for training and validation.: dict{DataLoader, DataLoader}
         :param epochs: The number of epochs: int
         :return: None
         """
-        batch_size = loader.batch_size
-        len_of_dataset = len(loader.dataset)
+        len_of_train_dataset = len(loader["train"].dataset)
+        len_of_val_dataset = len(loader["val"].dataset)
+
+        global_step = 0
+
         self.hyper_params["epochs"] = epochs
-        self.hyper_params["batch_size"] = batch_size
+        self.hyper_params["batch_size"] = loader["train"].batch_size
+        self.hyper_params["train_ds_size"] = len_of_train_dataset
+        self.hyper_params["val_ds_size"] = len_of_val_dataset
         self.experiment.log_parameters(self.hyper_params)
 
-        self.model.train()
+        for epoch in range(epochs):
+            correct = 0.0
+            total = 0.0
 
-        with self.experiment.train():
-            for epoch in range(epochs):
-                correct = 0.0
-                total = 0.0
-
-                pbar = tqdm.tqdm(total=len_of_dataset)
-                for batch, (x, y) in enumerate(loader):
+            with self.experiment.train():
+                self.model.train()
+                pbar = tqdm.tqdm(total=len_of_train_dataset)
+                for i, (x, y) in enumerate(loader["train"]):
                     b_size = x.shape[0]
                     x = x.to(self.device)
                     y = y.to(self.device)
@@ -113,14 +136,34 @@ class NeuralNetworkClassifier:
                     loss = self.criterion(outputs, y)
                     _, predicted = torch.max(outputs, 1)
                     total += y.shape[0]
-                    correct += (predicted == y).sum().float().item()
+                    correct += (predicted == y).sum().float().cpu().item()
 
-                    self.experiment.log_metric("loss", loss.item(), step=batch)
-                    self.experiment.log_metric("accuracy", float(correct / total), step=batch)
+                    self.experiment.log_metric("loss", loss.cpu().item(), step=epoch)
+                    self.experiment.log_metric("accuracy", float(correct / total), step=epoch)
 
                     loss.backward()
                     self.optimizer.step()
-                pbar.close()
+
+                with self.experiment.validate():
+                    self.model.eval()
+                    val_correct = 0.0
+                    val_total = 0.0
+
+                    for j, (x_val, y_val) in enumerate(loader["val"]):
+                        x_val = x_val.to(self.device)
+                        y_val = y_val.to(self.device)
+
+                        val_output = self.model(x_val)
+                        val_loss = self.criterion(val_output, y_val)
+                        _, val_pred = torch.max(val_output, 1)
+                        val_total += y_val.shape[0]
+                        val_correct += (val_pred == y_val).sum().float().cpu().item()
+
+                        self.experiment.log_metric("loss", val_loss.cpu().item(), step=epoch)
+                        self.experiment.log_metric("accuracy", float(val_correct / val_total), step=epoch)
+
+                global_step += 1
+            pbar.close()
 
     def evaluate(self, loader: DataLoader) -> None:
         """
@@ -141,11 +184,12 @@ class NeuralNetworkClassifier:
         running_loss = 0.0
         running_corrects = 0.0
         pbar = tqdm.tqdm(total=len(loader.dataset))
+        self.experiment.log_parameter("test_ds_size", len(loader.dataset))
 
         with self.experiment.test():
             with torch.no_grad():
-                correct = 0
-                total = 0
+                correct = 0.0
+                total = 0.0
                 for batch, (x, y) in enumerate(loader):
                     b_size = x.shape[0]
                     x = x.to(self.device)
