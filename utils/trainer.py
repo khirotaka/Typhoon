@@ -83,8 +83,8 @@ class NeuralNetworkClassifier:
         optimizer_config["criterion"] = criterion
 
         self.hyper_params = optimizer_config
+        self._start_epoch = 0
         self.__num_classes = None
-
         self._is_parallel = False
 
         if torch.cuda.device_count() > 1:
@@ -121,6 +121,7 @@ class NeuralNetworkClassifier:
         """
         len_of_train_dataset = len(loader["train"].dataset)
         len_of_val_dataset = len(loader["val"].dataset)
+        epochs = epochs + self._start_epoch
 
         self.hyper_params["epochs"] = epochs
         self.hyper_params["batch_size"] = loader["train"].batch_size
@@ -128,7 +129,7 @@ class NeuralNetworkClassifier:
         self.hyper_params["val_ds_size"] = len_of_val_dataset
         self.experiment.log_parameters(self.hyper_params)
 
-        for epoch in range(epochs):
+        for epoch in range(self._start_epoch, epochs):
             with self.experiment.train():
                 correct = 0.0
                 total = 0.0
@@ -193,12 +194,12 @@ class NeuralNetworkClassifier:
         :param loader: DataLoader for Evaluating: torch.utils.data.DataLoader
         :return: None
         """
-        self.model.eval()
         running_loss = 0.0
         running_corrects = 0.0
         pbar = tqdm.tqdm(total=len(loader.dataset))
-        self.experiment.log_parameter("test_ds_size", len(loader.dataset))
 
+        self.model.eval()
+        self.experiment.log_parameter("test_ds_size", len(loader.dataset))
         with self.experiment.test():
             with torch.no_grad():
                 correct = 0.0
@@ -226,37 +227,49 @@ class NeuralNetworkClassifier:
 
         print("\033[33m" + "Evaluation finished. Check your workspace" + "\033[0m" + " https://www.comet.ml/")
 
-    def save_weights(self, path: str) -> None:
+    def save_checkpoint(self, path: str) -> str:
         """
         The method of saving trained PyTorch model.
         Those weights are uploaded to comet.ml as backup.
         check "Asserts".
 
+        Note, .pth file contains
+            - the number of last epoch as `epochs`
+            - optimizer state as `optimizer_state_dict`
+            - model state as `model_state_dict`
         ---------------------------------------------------------
         clf = NeuralNetworkClassifier(
                 Network(), nn.CrossEntropyLoss(),
                 optim.Adam, optimizer_config
             )
         clf.fit(train_loader, epochs=10)
-        clf.save_weights('path/to/save/dir/')
+        filename = clf.save_checkpoints('path/to/save/dir/')
         ---------------------------------------------------------
 
         :param path: path to save directory. : str
-        :return: None
+        :return: file name with path. : str
         """
         file_name = "model_params-epochs_{}-{}.pth".format(
             self.hyper_params["epochs"], time.ctime().replace(" ", "_")
         )
         path = path + file_name
 
-        if self._is_parallel:
-            torch.save(self.model.module.state_dict(), path)
-        else:
-            torch.save(self.model.state_dict(), path)
+        checkpoints = {
+            "epoch": self.hyper_params["epochs"],
+            "optimizer_state_dict": self.optimizer.state_dict()
+        }
 
+        if self._is_parallel:
+            checkpoints["model_state_dict"] = self.model.module.state_dict()
+        else:
+            checkpoints["model_state_dict"] = self.model.state_dict()
+
+        torch.save(checkpoints, path)
         self.experiment.log_asset(path, file_name=file_name)
 
-    def load_weight(self, path: str) -> None:
+        return path
+
+    def load_checkpoint(self, path: str, map_location="cpu") -> None:
         """
         The method of loading trainer PyTorch model.
 
@@ -265,14 +278,18 @@ class NeuralNetworkClassifier:
                 Network(), nn.CrossEntropyLoss(),
                 optim.Adam, optimizer_config
             )
-        clf.load_weight('path/to/trained/weights.pth')
+        clf.load_checkpoints('path/to/trained/weights.pth')
         ---------------------------------------------------------
 
+        :param map_location: default cpu: str
         :param path: path to saved directory. : str
         :return: None
         """
-        map_location = None if torch.cuda.is_available() else "cpu"
-        self.model.load_state_dict(torch.load(path, map_location=map_location))
+        checkpoints = torch.load(path, map_location=map_location)
+        self._start_epoch = checkpoints["epoch"]
+        assert isinstance(self._start_epoch, int)
+        self.model.load_state_dict(checkpoints["model_state_dict"])
+        self.optimizer.load_state_dict(checkpoints["optimizer_state_dict"])
 
     @property
     def experiment_tag(self) -> list:
@@ -294,11 +311,12 @@ class NeuralNetworkClassifier:
         self.experiment.log_parameter("classes", self.__num_classes)
 
     def confusion_matrix(self, dataset: torch.utils.data.Dataset, labels=None, sample_weight=None) -> None:
+        targets = []
+        predicts = []
         loader = DataLoader(dataset, batch_size=1, shuffle=False)
         pbar = tqdm.tqdm(total=len(loader.dataset))
 
-        predicts = []
-        targets = []
+        self.model.eval()
         with torch.no_grad():
             for step, (x, y) in enumerate(loader):
                 x = x.to(self.device)
