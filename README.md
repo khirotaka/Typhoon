@@ -16,7 +16,15 @@ Typhoon/
         └── trainer.py
 ```
 * `utils/`
-    This directory contain training script and sub functions.
+... This directory contain training script and sub functions.
+
+## System Requirements
+* OS: Unix-like
+    * macOS Mojave 10.14.6
+    * Debian 9.9
+    
+* Python 3.5 or later
+* PyTorch 1.1.0
 
 ## References 
 * [Attention is all you need](https://arxiv.org/abs/1706.03762)
