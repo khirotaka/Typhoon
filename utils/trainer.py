@@ -288,7 +288,12 @@ class NeuralNetworkClassifier:
         checkpoints = torch.load(path, map_location=map_location)
         self._start_epoch = checkpoints["epoch"]
         assert isinstance(self._start_epoch, int)
-        self.model.load_state_dict(checkpoints["model_state_dict"])
+        
+        if self._is_parallel:
+            self.model.module.load_state_dict(checkpoints["model_state_dict"])
+        else:
+            self.model.load_state_dict(checkpoints["model_state_dict"])
+
         self.optimizer.load_state_dict(checkpoints["optimizer_state_dict"])
 
     @property
