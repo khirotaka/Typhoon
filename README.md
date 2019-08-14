@@ -8,9 +8,11 @@ Typhoon/
     ├── LICENSE
     ├── README.md
     ├── __init__.py
-    ├── model.py
-    ├── modules.py
-    └── utils/
+    ├── core
+    │   ├── __init__.py
+    │   ├── model.py
+    │   └── modules.py
+    └── utils
         ├── __init__.py
         ├── functions.py
         └── trainer.py
