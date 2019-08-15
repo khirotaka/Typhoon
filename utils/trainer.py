@@ -49,14 +49,16 @@ class NeuralNetworkClassifier:
     clf.fit(train_val_loader, epochs=10)
     clf.evaluate(test_loader)
     clf.confusion_matrix(test_ds)
-
     clf.save_weights("save_params_test/")
+
     ----------------------------------------------------------
 
     2nd, Run code on your shell.
     > export COMET_API_KEY="YOUR-API-KEY"
     > export COMET_PROJECT_NAME="YOUR-PROJECT-NAME"
     > user@user$ python code.py
+
+    ----------------------------------------------------------
 
     3rd, check logs on your workspace of comet.
 
@@ -221,8 +223,8 @@ class NeuralNetworkClassifier:
                     running_loss += loss.cpu().item()
                     running_corrects += torch.sum(predicted == y).float().cpu().item()
 
-                    self.experiment.log_metric("loss", running_loss, step=step)
-                    self.experiment.log_metric("accuracy", float(running_corrects / total), step=step)
+                    self.experiment.log_metric("loss", running_loss)
+                    self.experiment.log_metric("accuracy", float(running_corrects / total))
                 pbar.close()
 
         print("\033[33m" + "Evaluation finished. Check your workspace" + "\033[0m" + " https://www.comet.ml/")
@@ -302,6 +304,13 @@ class NeuralNetworkClassifier:
 
     @experiment_tag.setter
     def experiment_tag(self, tag: str) -> None:
+        """
+        clf = NeuralNetworkClassifier(...)
+        clf.experiment_tag = "tag"
+
+        :param tag: str
+        :return:
+        """
         assert isinstance(tag, str)
         self.experiment.add_tag(tag)
 
