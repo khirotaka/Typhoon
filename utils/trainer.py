@@ -171,6 +171,7 @@ class NeuralNetworkClassifier:
                     x_val = x_val.to(self.device)
                     y_val = y_val.to(self.device)
 
+                    self.optimizer.zero_grad()
                     val_output = self.model(x_val)
                     val_loss = self.criterion(val_output, y_val)
                     _, val_pred = torch.max(val_output, 1)
@@ -315,11 +316,11 @@ class NeuralNetworkClassifier:
         self.experiment.add_tag(tag)
 
     @property
-    def num_classes(self) -> int or None:
+    def num_class(self) -> int or None:
         return self.__num_classes
 
-    @num_classes.setter
-    def num_classes(self, num_class: int) -> None:
+    @num_class.setter
+    def num_class(self, num_class: int) -> None:
         assert isinstance(num_class, int) and num_class > 0, "the number of classes must be greater than 0."
         self.__num_classes = num_class
         self.experiment.log_parameter("classes", self.__num_classes)

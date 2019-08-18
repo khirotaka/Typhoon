@@ -1,23 +1,30 @@
+import math
+
 import torch
+import numpy as np
 import torch.nn as nn
 
 
-class PointWiseFeedForward(nn.Module):
-    def __init__(self, hidden_size: int, dropout_rate: float) -> None:
-        super(PointWiseFeedForward, self).__init__()
-        self.hidden_size = hidden_size
-        self.dropout_rate = dropout_rate
+class PositionalEncoding(nn.Module):
+    def __init__(self, d_model, seq_len):
+        super(PositionalEncoding, self).__init__()
+        self.d_model = d_model
 
-        self.network = nn.Sequential(
-            nn.Linear(hidden_size, hidden_size * 4),
-            nn.ReLU(),
-            nn.Dropout(p=dropout_rate),
-            nn.Linear(hidden_size * 4, hidden_size)
-        )
+        pe = torch.zeros(seq_len, d_model)
 
-    def forward(self, tensor: torch.Tensor) -> torch.Tensor:
-        tensor = self.network(tensor)
-        return tensor
+        for pos in range(seq_len):
+            for i in range(0, d_model, 2):
+                pe[pos, i] = math.sin(pos / (10000 ** ((2 * i) / d_model)))
+                pe[pos, i+1] = math.cos(pos / (10000 ** ((2 * (i+1)) / d_model)))
+
+        pe = pe.unsqueeze(0)
+        self.register_buffer("pe", pe)
+
+    def forward(self, x):
+        seq_len = x.shape[1]
+        x = math.sqrt(self.d_model) * x
+        x = x + self.pe[:, :seq_len].requires_grad_(False)
+        return x
 
 
 class ResidualBlock(nn.Module):
@@ -29,8 +36,14 @@ class ResidualBlock(nn.Module):
         self.attn_weights = None
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        :param x: [N, seq_len, features]
+        :return: [N, seq_len, features]
+        """
         if isinstance(self.layer, nn.MultiheadAttention):
-            output, self.attn_weights = self.layer(x, x, x)
+            src = x.transpose(0, 1)     # [seq_len, N, features]
+            output, self.attn_weights = self.layer(src, src, src)
+            output = output.transpose(0, 1)     # [N, seq_len, features]
 
         else:
             output = self.layer(x)
@@ -40,13 +53,90 @@ class ResidualBlock(nn.Module):
         return output
 
 
+class PointWiseFeedForward(nn.Module):
+    def __init__(self, hidden_size: int) -> None:
+        super(PointWiseFeedForward, self).__init__()
+        self.hidden_size = hidden_size
+
+        self.conv = nn.Sequential(
+            nn.Conv1d(hidden_size, hidden_size * 2, 1),
+            nn.ReLU(),
+            nn.Conv1d(hidden_size * 2, hidden_size, 1)
+        )
+
+    def forward(self, tensor: torch.Tensor) -> torch.Tensor:
+        tensor = tensor.transpose(1, 2)
+        tensor = self.conv(tensor)
+        tensor = tensor.transpose(1, 2)
+
+        return tensor
+
+
 class EncoderBlock(nn.Module):
-    def __init__(self, embed_dim: int, num_head: int) -> None:
+    def __init__(self, embed_dim: int, num_head: int, dropout_rate=0.1) -> None:
         super(EncoderBlock, self).__init__()
-        self.attention = ResidualBlock(nn.MultiheadAttention(embed_dim, num_head), embed_dim)
-        self.ffn = ResidualBlock(PointWiseFeedForward(embed_dim, dropout_rate=0.1), embed_dim)
+        self.attention = ResidualBlock(nn.MultiheadAttention(embed_dim, num_head), embed_dim, p=dropout_rate)
+        self.ffn = ResidualBlock(PointWiseFeedForward(embed_dim), embed_dim, p=dropout_rate)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.attention(x)
         x = self.ffn(x)
+        return x
+
+
+class DenseInterpolation(nn.Module):
+    def __init__(self, seq_len: int, factor: int) -> None:
+        """
+        :param seq_len: sequence length
+        :param factor: factor M
+        """
+        super(DenseInterpolation, self).__init__()
+
+        W = np.zeros((factor, seq_len), dtype=np.float32)
+
+        for t in range(seq_len):
+            s = np.array((factor * (t + 1)) / seq_len, dtype=np.float32)
+            for m in range(factor):
+                tmp = np.array(1 - (np.abs(s - (1+m)) / factor), dtype=np.float32)
+                w = np.power(tmp, 2, dtype=np.float32)
+                W[m, t] = w
+
+        W = torch.tensor(W).float().unsqueeze(0)
+        self.register_buffer("W", W)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        w = self.W.repeat(x.shape[0], 1, 1).requires_grad_(False)
+        u = torch.bmm(w, x)
+        return u.transpose_(1, 2)
+
+
+class MultiLoss(nn.Module):
+    def __init__(self, num_labels):
+        super(MultiLoss, self).__init__()
+        self.num_labels = num_labels
+
+    def forward(self, yhat, y):
+        small = 1e-15
+
+        loss = - (y * torch.log(yhat + small) + (1-y) * torch.log(1 - yhat + small))
+        loss = torch.sum(loss, 1) / self.num_labels
+
+        return torch.sum(loss)
+
+
+class ClassificationModule(nn.Module):
+    def __init__(self, d_model, factor, num_class):
+        super(ClassificationModule, self).__init__()
+        self.d_model = d_model
+        self.factor = factor
+        self.num_class = num_class
+
+        self.fc = nn.Linear(d_model * factor, num_class)
+
+        nn.init.normal_(self.fc.weight, std=0.02)
+        nn.init.normal_(self.fc.bias, 0)
+
+    def forward(self, x):
+        x = x.contiguous().view(-1, self.factor * self.d_model)
+        x = self.fc(x)
         return x
