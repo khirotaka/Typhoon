@@ -74,15 +74,12 @@ class NeuralNetworkClassifier:
     ----------------------------------------------------------
 
     """
-    def __init__(self, model, criterion, optimizer, optimizer_config: dict, comet_config: dict) -> None:
+    def __init__(self, model, criterion, optimizer, optimizer_config: dict, experiment: Experiment) -> None:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = model.to(self.device)
         self.optimizer = optimizer(model.parameters(), **optimizer_config)
         self.criterion = criterion
-        self.experiment = Experiment(**comet_config)
-
-        optimizer_config["optimizer"] = optimizer
-        optimizer_config["criterion"] = criterion
+        self.experiment = experiment
 
         self.hyper_params = optimizer_config
         self._start_epoch = 0
@@ -230,32 +227,27 @@ class NeuralNetworkClassifier:
 
         print("\033[33m" + "Evaluation finished. Check your workspace" + "\033[0m" + " https://www.comet.ml/")
 
-    def save_checkpoint(self, path: str) -> str:
+    def save_checkpoint(self) -> dict:
         """
         The method of saving trained PyTorch model.
-        Those weights are uploaded to comet.ml as backup.
-        check "Asserts".
 
-        Note, .pth file contains
+        Note,  return value contains
             - the number of last epoch as `epochs`
             - optimizer state as `optimizer_state_dict`
             - model state as `model_state_dict`
+
         ---------------------------------------------------------
         clf = NeuralNetworkClassifier(
                 Network(), nn.CrossEntropyLoss(),
                 optim.Adam, optimizer_config
             )
+
         clf.fit(train_loader, epochs=10)
-        filename = clf.save_checkpoints('path/to/save/dir/')
+        checkpoints = clf.save_checkpoint()
         ---------------------------------------------------------
 
-        :param path: path to save directory. : str
-        :return: file name with path. : str
+        :return: dict {'epoch', 'optimizer_state_dict', 'model_state_dict'}
         """
-        file_name = "model_params-epochs_{}-{}.pth".format(
-            self.hyper_params["epochs"], time.ctime().replace(" ", "_")
-        )
-        path = path + file_name
 
         checkpoints = {
             "epoch": self.hyper_params["epochs"],
@@ -267,37 +259,79 @@ class NeuralNetworkClassifier:
         else:
             checkpoints["model_state_dict"] = self.model.state_dict()
 
-        torch.save(checkpoints, path)
-        self.experiment.log_asset(path, file_name=file_name)
+        return checkpoints
 
-        return path
-
-    def load_checkpoint(self, path: str, map_location="cpu") -> None:
+    def save_to_file(self, path: str) -> str:
         """
-        The method of loading trainer PyTorch model.
+        The method of saving trained PyTorch model to file.
+        Those weights are uploaded to comet.ml as backup.
+        check "Asserts".
+
+        Note, .pth file contains
+            - the number of last epoch as `epochs`
+            - optimizer state as `optimizer_state_dict`
+            - model state as `model_state_dict`
 
         ---------------------------------------------------------
         clf = NeuralNetworkClassifier(
                 Network(), nn.CrossEntropyLoss(),
                 optim.Adam, optimizer_config
             )
-        clf.load_checkpoints('path/to/trained/weights.pth')
+
+        clf.fit(train_loader, epochs=10)
+        filename = clf.save_to_file('path/to/save/dir/')
         ---------------------------------------------------------
 
-        :param map_location: default cpu: str
-        :param path: path to saved directory. : str
+        :param path: path to saving directory. : string
+        :return: path to file : string
+        """
+        file_name = "model_params-epochs_{}-{}.pth".format(
+            self.hyper_params["epochs"], time.ctime().replace(" ", "_")
+        )
+        path = path + file_name
+
+        checkpoints = self.save_checkpoint()
+
+        torch.save(checkpoints, path)
+        self.experiment.log_asset(path, file_name=file_name)
+
+        return path
+
+    def load_checkpoint(self, checkpoints: dict) -> None:
+        """
+        The method of loading trained PyTorch model.
+
+        :param checkpoints: dictionary which contains {'epoch', 'optimizer_state_dict', 'model_state_dict'}
         :return: None
         """
-        checkpoints = torch.load(path, map_location=map_location)
         self._start_epoch = checkpoints["epoch"]
         assert isinstance(self._start_epoch, int)
-        
+
         if self._is_parallel:
             self.model.module.load_state_dict(checkpoints["model_state_dict"])
         else:
             self.model.load_state_dict(checkpoints["model_state_dict"])
 
         self.optimizer.load_state_dict(checkpoints["optimizer_state_dict"])
+
+    def restore_from_file(self, path: str, map_location="cpu"):
+        """
+        The method of loading trained PyTorch model from file.
+
+        ---------------------------------------------------------
+        clf = NeuralNetworkClassifier(
+                Network(), nn.CrossEntropyLoss(),
+                optim.Adam, optimizer_config
+            )
+        clf.restore_from_file('path/to/trained/weights.pth')
+        ---------------------------------------------------------
+
+        :param path: path to saved directory. : str
+        :param map_location: default cpu: str
+        :return: None
+        """
+        checkpoints = torch.load(path, map_location=map_location)
+        self.load_checkpoint(checkpoints)
 
     @property
     def experiment_tag(self) -> list:
