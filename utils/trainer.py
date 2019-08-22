@@ -200,6 +200,7 @@ class NeuralNetworkClassifier:
 
         self.model.eval()
         self.experiment.log_parameter("test_ds_size", len(loader.dataset))
+
         with self.experiment.test():
             with torch.no_grad():
                 correct = 0.0
@@ -297,7 +298,7 @@ class NeuralNetworkClassifier:
 
         return path
 
-    def load_checkpoint(self, checkpoints: dict) -> None:
+    def restore_checkpoint(self, checkpoints: dict) -> None:
         """
         The method of loading trained PyTorch model.
 
@@ -331,7 +332,7 @@ class NeuralNetworkClassifier:
         :return: None
         """
         checkpoints = torch.load(path, map_location=map_location)
-        self.load_checkpoint(checkpoints)
+        self.restore_checkpoint(checkpoints)
 
     @property
     def experiment_tag(self) -> list:
@@ -344,7 +345,7 @@ class NeuralNetworkClassifier:
         clf.experiment_tag = "tag"
 
         :param tag: str
-        :return:
+        :return: None
         """
         assert isinstance(tag, str)
         self.experiment.add_tag(tag)
@@ -355,17 +356,27 @@ class NeuralNetworkClassifier:
 
     @num_class.setter
     def num_class(self, num_class: int) -> None:
-        assert isinstance(num_class, int) and num_class > 0, "the number of classes must be greater than 0."
+        assert isinstance(num_class, int) and num_class > 0, "the number of class must be greater than 0."
         self.__num_classes = num_class
         self.experiment.log_parameter("classes", self.__num_classes)
 
     def confusion_matrix(self, dataset: torch.utils.data.Dataset, labels=None, sample_weight=None) -> None:
+        """
+        Generate confusion matrix.
+        result save on comet.ml.
+
+        :param dataset: dataset for generating confusion matrix.
+        :param labels
+        :param sample_weight:
+        :return: None
+        """
         targets = []
         predicts = []
         loader = DataLoader(dataset, batch_size=1, shuffle=False)
         pbar = tqdm.tqdm(total=len(loader.dataset))
 
         self.model.eval()
+
         with torch.no_grad():
             for step, (x, y) in enumerate(loader):
                 x = x.to(self.device)
