@@ -169,7 +169,6 @@ class NeuralNetworkClassifier:
                         x_val = x_val.to(self.device)
                         y_val = y_val.to(self.device)
 
-                        self.optimizer.zero_grad()
                         val_output = self.model(x_val)
                         val_loss = self.criterion(val_output, y_val)
                         _, val_pred = torch.max(val_output, 1)
