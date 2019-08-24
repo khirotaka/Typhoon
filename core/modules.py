@@ -53,9 +53,9 @@ class ResidualBlock(nn.Module):
         return output
 
 
-class PointWiseFeedForward(nn.Module):
+class PositionWiseFeedForward(nn.Module):
     def __init__(self, hidden_size: int) -> None:
-        super(PointWiseFeedForward, self).__init__()
+        super(PositionWiseFeedForward, self).__init__()
         self.hidden_size = hidden_size
 
         self.conv = nn.Sequential(
@@ -72,11 +72,26 @@ class PointWiseFeedForward(nn.Module):
         return tensor
 
 
+class PositionWiseDecreasingFeedForward(nn.Module):
+    def __init__(self, hidden_size: int) -> None:
+        super(PositionWiseDecreasingFeedForward, self).__init__()
+        self.hidden_size = hidden_size
+
+        self.ffn = PositionWiseFeedForward(hidden_size)
+        self.fc = nn.Linear(hidden_size, hidden_size // 2)
+
+    def forward(self, tensor: torch.Tensor) -> torch.Tensor:
+        tensor = self.ffn(tensor)
+        tensor = torch.relu(tensor)
+        tensor = self.fc(tensor)
+        return tensor
+
+
 class EncoderBlock(nn.Module):
     def __init__(self, embed_dim: int, num_head: int, dropout_rate=0.1) -> None:
         super(EncoderBlock, self).__init__()
         self.attention = ResidualBlock(nn.MultiheadAttention(embed_dim, num_head), embed_dim, p=dropout_rate)
-        self.ffn = ResidualBlock(PointWiseFeedForward(embed_dim), embed_dim, p=dropout_rate)
+        self.ffn = ResidualBlock(PositionWiseFeedForward(embed_dim), embed_dim, p=dropout_rate)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.attention(x)

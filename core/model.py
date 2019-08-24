@@ -5,7 +5,7 @@ from Typhoon.core import modules
 
 
 class EncoderLayer(nn.Module):
-    def __init__(self, input_features, seq_len, n_heads, factor, num_layers, d_model=512, dropout_rate=0.1):
+    def __init__(self, input_features, seq_len, n_heads, factor, num_layers, d_model=128, dropout_rate=0.2):
         super(EncoderLayer, self).__init__()
         self.d_model = d_model
         self.factor = factor
