@@ -41,7 +41,7 @@ class NeuralNetworkClassifier:
 
     clf = NeuralNetworkClassifier(
             Network(), nn.CrossEntropyLoss(),
-            optim.Adam, optimizer_config, comet_config
+            optim.Adam, optimizer_config, Experiment()
         )
 
     clf.experiment_tag = "experiment_tag"

@@ -15,3 +15,8 @@ def positional_encoding(n_positions: int, hidden_dim: int) -> torch.Tensor:
     pos_enc = rads[np.newaxis, ...]
     pos_enc = torch.tensor(pos_enc, dtype=torch.float32, requires_grad=False)
     return pos_enc
+
+
+def silu(x: torch.Tensor) -> torch.Tensor:
+    output = x * torch.sigmoid(x)
+    return output

@@ -3,6 +3,16 @@ import math
 import torch
 import numpy as np
 import torch.nn as nn
+from ..utils.functions import silu
+
+
+class SiLU(nn.Module):
+    def __init__(self) -> None:
+        super(SiLU, self).__init__()
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = silu(x)
+        return x
 
 
 class PositionalEncoding(nn.Module):
@@ -72,21 +82,6 @@ class PositionWiseFeedForward(nn.Module):
         return tensor
 
 
-class PositionWiseDecreasingFeedForward(nn.Module):
-    def __init__(self, hidden_size: int) -> None:
-        super(PositionWiseDecreasingFeedForward, self).__init__()
-        self.hidden_size = hidden_size
-
-        self.ffn = PositionWiseFeedForward(hidden_size)
-        self.fc = nn.Linear(hidden_size, hidden_size // 2)
-
-    def forward(self, tensor: torch.Tensor) -> torch.Tensor:
-        tensor = self.ffn(tensor)
-        tensor = torch.relu(tensor)
-        tensor = self.fc(tensor)
-        return tensor
-
-
 class EncoderBlock(nn.Module):
     def __init__(self, embed_dim: int, num_head: int, dropout_rate=0.1) -> None:
         super(EncoderBlock, self).__init__()
@@ -96,6 +91,20 @@ class EncoderBlock(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.attention(x)
         x = self.ffn(x)
+        return x
+
+
+class DecreasingEncoderBlock(nn.Module):
+    def __init__(self, embed_dim: int, num_head: int, dropout_rate=0.1) -> None:
+        super(DecreasingEncoderBlock, self).__init__()
+        self.attention = ResidualBlock(nn.MultiheadAttention(embed_dim, num_head), embed_dim, p=dropout_rate)
+        self.ffn = ResidualBlock(PositionWiseFeedForward(embed_dim), embed_dim, p=dropout_rate)
+        self.fc = nn.Linear(embed_dim, embed_dim // 2)
+
+    def forward(self, x):
+        x = self.attention(x)
+        x = self.ffn(x)
+        x = self.fc(x)
         return x
 
 
