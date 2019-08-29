@@ -44,6 +44,85 @@ def load_data_from_ts_file(path):
     return data, label
 
 
+def load_har_files(filenames):
+    done = []
+    for name in filenames:
+        data = pd.read_csv(name, header=None, delim_whitespace=True).values
+        done.append(data)
+
+    done = np.dstack(done)
+    return done
+
+
+def fetch_har():
+    url = "http://archive.ics.uci.edu/ml/machine-learning-databases/00240/UCI%20HAR%20Dataset.zip"
+    if not os.path.isdir(SAVE_DIR):
+        os.makedirs(SAVE_DIR)
+
+    filename = url.split("/")[-1]
+
+    file_size = int(requests.head(url).headers["content-length"])
+
+    r = requests.get(url, stream=True)
+    pbar = tqdm.tqdm(total=file_size, unit="B", unit_scale=True)
+
+    with open(filename, "wb") as f:
+        for chunk in r.iter_content(chunk_size=1024):
+            f.write(chunk)
+            pbar.update(len(chunk))
+
+        pbar.close()
+
+    with zipfile.ZipFile(filename) as zfile:
+        zfile.extractall(SAVE_DIR)
+    os.remove(filename)
+
+
+def load_har(raw=True):
+    save_dir = SAVE_DIR + "/UCI HAR Dataset/"
+    if not os.path.isdir(save_dir):
+        print("Downloading UCI HAR Dataset ...")
+        fetch_har()
+
+    if raw:
+        types = ["train", "test"]
+        path_to_raw = "Inertial Signals/"
+
+        def load_raw_data(file_type):
+            datasets = [
+                "total_acc_x_" + file_type + ".txt", "total_acc_y_" + file_type + ".txt",
+                "total_acc_z_" + file_type + ".txt",
+                "body_acc_x_" + file_type + ".txt", "body_acc_y_" + file_type + ".txt",
+                "body_acc_z_" + file_type + ".txt",
+                "body_gyro_x_" + file_type + ".txt", "body_gyro_y_" + file_type + ".txt",
+                "body_gyro_z_" + file_type + ".txt"
+            ]
+
+            tmp = [save_dir + file_type + "/" + path_to_raw + i for i in datasets]
+
+            X = load_har_files(tmp)
+            return X
+
+        raw_datasets = []
+
+        for mode in types:
+            data = load_raw_data(mode)
+            target = pd.read_csv()
+
+            raw_datasets.append((data, target))
+
+        (x_train, y_train), (x_test, y_test) = raw_datasets[0], raw_datasets[1]
+
+    else:
+        x_train = pd.read_csv()
+        y_train = pd.read_csv()
+
+        x_test = pd.read_csv()
+        y_test = pd.read_csv()
+
+    return (x_train, y_train), (x_test, y_test)
+
+
 def fetch_mhealth(extract=True, url=None):
     if not url:
         url = "http://archive.ics.uci.edu/ml/machine-learning-databases/00319/MHEALTHDATASET.zip"
