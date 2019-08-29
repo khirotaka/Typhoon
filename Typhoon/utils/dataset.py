@@ -4,7 +4,9 @@ import tqdm
 import requests
 import numpy as np
 import pandas as pd
-from sktime.utils.load_data import load_from_tsfile_to_dataframe, load_from_arff_to_dataframe
+from torch.utils.data import Dataset
+from sktime.utils.load_data import load_from_tsfile_to_dataframe
+from .functions import FixedSlidingWindow
 
 SAVE_DIR = os.getcwd()
 
@@ -134,6 +136,51 @@ def fetch_mhealth(extract=True, url=None):
             zfile.extractall(SAVE_DIR)
 
     os.remove(filename)
+
+
+def load_mhealth(items: list, window_size: int, overlap_rate=0.5, drop_null=True) -> (np.ndarray, np.ndarray):
+    path = os.getcwd() + "/MHEALTHDATASET/mHealth_subject{}.log"
+
+    data = []
+    labels = []
+    sw = FixedSlidingWindow(window_size, overlap_rate=overlap_rate)
+    for i in items:
+        tmp = pd.read_csv(path.format(i), delim_whitespace=True, header=None)
+        x = tmp.iloc[:, :-1]
+        y = tmp.iloc[:, -1]
+        x, y = sw(x, y)
+
+        if drop_null:
+            x = x[y != 0]
+            y = y[y != 0]
+            y -= 1
+
+        data.append(x)
+        labels.append(y)
+
+    data = np.vstack(data)
+    labels = np.hstack(labels)
+
+    return data, labels
+
+
+class MHealth(Dataset):
+    def __init__(self, items: list, window_size: int, overlap_rate=0.5, drop_null=True):
+        self.data, self.labels = load_mhealth(
+            items,
+            window_size=window_size,
+            overlap_rate=overlap_rate,
+            drop_null=drop_null
+        )
+
+    def __getitem__(self, item):
+        x = self.data[item]
+        y = self.labels[item]
+
+        return x, y
+
+    def __len__(self):
+        return len(self.labels)
 
 
 def fetch_epilepsy(extract=True) -> str:
