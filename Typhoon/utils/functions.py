@@ -44,7 +44,7 @@ class FixedSlidingWindow:
         self.overlap_rate = overlap_rate
         self.overlap = int(window_size * overlap_rate)
 
-    def transform(self, x: np.ndarray) -> np.ndarray:
+    def transform(self, x: np.array) -> np.array:
         seq_len = x.shape[0]
         assert seq_len > self.window_size
         data = [x[i:i + self.window_size] for i in range(0, seq_len - self.window_size, self.overlap)]
@@ -53,7 +53,7 @@ class FixedSlidingWindow:
         return data
 
     @staticmethod
-    def clean(labels: np.ndarray) -> np.ndarray:
+    def clean(labels: np.array) -> np.array:
         tmp = []
         for l in labels:
             window_size = len(l)
@@ -69,7 +69,7 @@ class FixedSlidingWindow:
 
         return np.array(tmp)
 
-    def __call__(self, x: np.ndarray, y: np.ndarray) -> (np.ndarray, np.ndarray):
+    def __call__(self, x: np.array, y: np.array) -> (np.array, np.array):
         data = self.transform(x)
         label = self.transform(y)
         label = self.clean(label)
