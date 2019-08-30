@@ -149,6 +149,8 @@ def load_mhealth(items: list, window_size: int, overlap_rate=0.5, drop_null=True
         x = tmp.iloc[:, :-1]
         y = tmp.iloc[:, -1]
         x, y = sw(x, y)
+        x = x.astype(np.float32)
+        y = y.astype(np.int64)
 
         if drop_null:
             x = x[y != 0]

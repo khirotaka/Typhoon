@@ -1,3 +1,4 @@
+import os
 import time
 import tqdm
 import pandas as pd
@@ -286,6 +287,9 @@ class NeuralNetworkClassifier:
         :param path: path to saving directory. : string
         :return: path to file : string
         """
+        if not os.path.isdir(path):
+            os.mkdir(path)
+
         file_name = "model_params-epochs_{}-{}.pth".format(
             self.hyper_params["epochs"], time.ctime().replace(" ", "_")
         )
