@@ -139,7 +139,12 @@ def fetch_mhealth(extract=True, url=None):
 
 
 def load_mhealth(items: list, window_size: int, overlap_rate=0.5, drop_null=True) -> (np.ndarray, np.ndarray):
-    path = os.getcwd() + "/MHEALTHDATASET/mHealth_subject{}.log"
+    path = os.getcwd() + "/MHEALTHDATASET/"
+
+    if not os.path.isdir(path):
+        fetch_mhealth()
+
+    path = path + "mHealth_subject{}.log"
 
     data = []
     labels = []
