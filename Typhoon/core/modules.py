@@ -94,17 +94,39 @@ class EncoderBlock(nn.Module):
         return x
 
 
-class DecreasingEncoderBlock(nn.Module):
+class DecoderBlock(nn.Module):
     def __init__(self, embed_dim: int, num_head: int, dropout_rate=0.1) -> None:
-        super(DecreasingEncoderBlock, self).__init__()
-        self.attention = ResidualBlock(nn.MultiheadAttention(embed_dim, num_head), embed_dim, p=dropout_rate)
-        self.ffn = ResidualBlock(PositionWiseFeedForward(embed_dim), embed_dim, p=dropout_rate)
-        self.fc = nn.Linear(embed_dim, embed_dim // 2)
+        super(DecoderBlock, self).__init__()
+        self.self_attn = nn.MultiheadAttention(embed_dim, num_head)
+        self.dropout1 = nn.Dropout(p=dropout_rate)
+        self.norm1 = nn.LayerNorm(embed_dim)
 
-    def forward(self, x):
-        x = self.attention(x)
+        self.src_attn = nn.MultiheadAttention(embed_dim, num_head)
+        self.dropout2 = nn.Dropout(p=dropout_rate)
+        self.norm2 = nn.LayerNorm(embed_dim)
+
+        self.ffn = ResidualBlock(PositionWiseFeedForward(embed_dim), embed_dim, p=dropout_rate)
+
+    def forward(self, x: torch.Tensor, memory: torch.Tensor, tgt_mask: torch.Tensor) -> torch.Tensor:
+        """
+
+        :param x: [N, seq_len, features]
+        :param memory: [N, seq_len, features]
+        :param tgt_mask: [target_len, scr_len]
+        :return:
+        """
+        x = x.transpose(0, 1)                   # [seq_len, N, features]
+        memory = memory.transpose(0, 1)         # [seq_len, N, features]
+
+        attn1, weight1 = self.self_attn(x, x, x, attn_mask=tgt_mask)
+        x = x + self.dropout1(attn1)
+        x = self.norm1(x)
+
+        attn2, weight2 = self.src_attn(x, memory, memory)
+        attn2 = x + self.dropout2(attn2)
+        x = self.norm2(attn2)
+
         x = self.ffn(x)
-        x = self.fc(x)
         return x
 
 
@@ -132,20 +154,6 @@ class DenseInterpolation(nn.Module):
         w = self.W.repeat(x.shape[0], 1, 1).requires_grad_(False)
         u = torch.bmm(w, x)
         return u.transpose_(1, 2)
-
-
-class MultiLoss(nn.Module):
-    def __init__(self, num_labels):
-        super(MultiLoss, self).__init__()
-        self.num_labels = num_labels
-
-    def forward(self, yhat, y):
-        small = 1e-15
-
-        loss = - (y * torch.log(yhat + small) + (1-y) * torch.log(1 - yhat + small))
-        loss = torch.sum(loss, 1) / self.num_labels
-
-        return torch.sum(loss)
 
 
 class ClassificationModule(nn.Module):

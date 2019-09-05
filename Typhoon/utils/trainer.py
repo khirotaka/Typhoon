@@ -9,6 +9,8 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from sklearn.metrics import confusion_matrix
 
+from Typhoon.utils.functions import ScheduledOptimizer
+
 
 class NeuralNetworkClassifier:
     """
@@ -78,7 +80,7 @@ class NeuralNetworkClassifier:
     def __init__(self, model, criterion, optimizer, optimizer_config: dict, experiment: Experiment) -> None:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = model.to(self.device)
-        self.optimizer = optimizer(model.parameters(), **optimizer_config)
+        self.optimizer = optimizer(self.model.parameters(), **optimizer_config)
         self.criterion = criterion
         self.experiment = experiment
 
@@ -401,3 +403,97 @@ class NeuralNetworkClassifier:
                 self.hyper_params["epochs"], time.ctime().replace(" ", "_")
             )
         )
+
+
+class AutoEncoderTrainer(NeuralNetworkClassifier):
+    def __init__(self, model, criterion, optimizer, optimizer_config: dict, schedule_opt: dict, experiment):
+        super(AutoEncoderTrainer, self).__init__(model, criterion, optimizer, optimizer_config, experiment)
+        self.optimizer = ScheduledOptimizer(
+            optimizer(
+                filter(
+                    lambda x: x.requires_grad, self.model.parameters()
+                ), **optimizer_config
+            ),
+            d_model=schedule_opt["d_model"],
+            warm_up=schedule_opt["warm_up"]
+        )
+
+    def fit(self, loader: dict, epochs: int, checkpoint_path=None) -> None:
+        len_of_train_dataset = len(loader["train"].dataset)
+        len_of_val_dataset = len(loader["val"].dataset)
+        epochs = epochs + self._start_epoch
+
+        self.hyper_params["epochs"] = epochs
+        self.hyper_params["batch_size"] = loader["train"].batch_size
+        self.hyper_params["train_ds_size"] = len_of_train_dataset
+        self.hyper_params["val_ds_size"] = len_of_val_dataset
+        self.experiment.log_parameters(self.hyper_params)
+
+        for epoch in range(self._start_epoch, epochs):
+            if checkpoint_path is not None and epoch % 100 == 0:
+                self.save_to_file(checkpoint_path)
+
+            with self.experiment.train():
+                self.model.train()
+                pbar = tqdm.tqdm(total=len_of_train_dataset)
+                for x, _ in loader["train"]:
+                    b_size = x.shape[0]
+                    x = x.to(self.device)
+
+                    pbar.set_description(
+                        "\033[36m" + "Training" + "\033[0m" + " - Epochs: {:03d}/{:03d}".format(epoch + 1, epochs)
+                    )
+                    pbar.update(b_size)
+
+                    self.optimizer.zero_grad()
+                    outputs = self.model(x)
+                    loss = self.criterion(outputs, x)
+                    loss.backward()
+                    self.optimizer.step()
+
+                    self.experiment.log_metric("loss", loss.cpu().item(), step=epoch)
+                    self.experiment.log_metric("lr", self.optimizer.get_lr())
+
+            with self.experiment.validate():
+                with torch.no_grad():
+                    self.model.eval()
+                    for x_val, _ in loader["val"]:
+                        x_val = x_val.to(self.device)
+                        val_output = self.model(x_val)
+                        val_loss = self.criterion(val_output, x_val)
+
+                        self.experiment.log_metric("loss", val_loss.cpu().item(), step=epoch)
+
+            pbar.close()
+
+    def evaluate(self, loader: DataLoader) -> None:
+        running_loss = 0.0
+        pbar = tqdm.tqdm(total=len(loader.dataset))
+
+        self.model.eval()
+        self.experiment.log_parameter("test_ds_size", len(loader.dataset))
+
+        with self.experiment.test():
+            with torch.no_grad():
+                for step, (x, _) in enumerate(loader):
+                    b_size = x.shape[0]
+                    x = x.to(self.device)
+
+                    pbar.set_description("\033[32m"+"Evaluating"+"\033[0m")
+                    pbar.update(b_size)
+                    outputs = self.model(x)
+                    loss = self.criterion(outputs, x)
+
+                    running_loss += loss.cpu().item()
+
+                    self.experiment.log_metric("loss", running_loss)
+                pbar.close()
+
+        print("\033[33m" + "Evaluation finished. Check your workspace" + "\033[0m" + " https://www.comet.ml/")
+
+    @property
+    def num_class(self) -> int or None:
+        raise Experiment("Unable to set class count")
+
+    def confusion_matrix(self, dataset: torch.utils.data.Dataset, labels=None, sample_weight=None) -> None:
+        raise Exception("Unable to use this method.")
