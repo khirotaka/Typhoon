@@ -1,7 +1,7 @@
 FROM pytorch/pytorch:1.1.0-cuda10.0-cudnn7.5-runtime
 
 ENV PATH $PATH:/root/.local/bin
-RUN apt update && apt install -y vim
+RUN apt-get update && apt-get install -y vim
 
 RUN pip install cython && pip install --user \
     comet-ml \
