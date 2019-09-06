@@ -45,4 +45,4 @@ clf.fit(
 )
 clf.evaluate(test_loader)
 clf.confusion_matrix(test_ds)
-clf.save_to_file("save_params_test/")
+clf.save_to_file("save_params_mhealth/")
