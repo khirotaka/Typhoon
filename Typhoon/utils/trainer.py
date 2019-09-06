@@ -96,7 +96,7 @@ class NeuralNetworkClassifier:
             notice = "Running on {} GPUs.".format(torch.cuda.device_count())
             print("\033[33m" + notice + "\033[0m")
 
-    def fit(self, loader: dict, epochs: int) -> None:
+    def fit(self, loader: dict, epochs: int, checkpoint_path=None) -> None:
         """
         The method of training your PyTorch Model.
         With the assumption, This method use for training network for classification.
@@ -119,6 +119,7 @@ class NeuralNetworkClassifier:
 
         :param loader: Dictionary which contains Data Loaders for training and validation.: dict{DataLoader, DataLoader}
         :param epochs: The number of epochs: int
+        :param checkpoint_path: str
         :return: None
         """
         len_of_train_dataset = len(loader["train"].dataset)
@@ -132,6 +133,8 @@ class NeuralNetworkClassifier:
         self.experiment.log_parameters(self.hyper_params)
 
         for epoch in range(self._start_epoch, epochs):
+            if checkpoint_path is not None and epoch % 100 == 0:
+                self.save_to_file(checkpoint_path)
             with self.experiment.train():
                 correct = 0.0
                 total = 0.0
