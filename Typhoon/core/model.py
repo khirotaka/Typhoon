@@ -16,13 +16,46 @@ class EncoderLayer(nn.Module):
         ])
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.transform(x)               # [N, seq_len, d_model]
-        x += self.positional_enc(x)         # [N, seq_len, d_model]
+        if isinstance(self.transform, nn.RNNBase):
+            x, h = self.transform(x)        # [N, seq_len, n_directions * hidden_size]
+        else:
+            x = self.transform(x)           # [N, seq_len, d_model]
+
+        x = self.positional_enc(x)         # [N, seq_len, d_model]
 
         for l in self.blocks:
             x = l(x)                        # [N, seq_len, d_model]
 
         return x
+
+
+class EncoderLayerWithLSTM(nn.Module):
+    def __init__(self, input_features, seq_len, n_heads, n_layers, d_model=128, dropout_rate=0.2, bidirectional=False):
+        super(EncoderLayerWithLSTM, self).__init__()
+        flag = d_model // 2 if bidirectional else d_model
+
+        self.d_model = d_model
+
+        self.transform = nn.LSTM(
+            input_features,
+            flag,
+            num_layers=2,
+            batch_first=True,
+            dropout=dropout_rate,
+            bidirectional=bidirectional
+        )
+        self.positional_enc = modules.PositionalEncoding(d_model, seq_len)
+        self.blocks = nn.ModuleList([
+            modules.EncoderBlock(d_model, n_heads, dropout_rate) for _ in range(n_layers)
+        ])
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        out, h = self.transform(x)
+        out = self.positional_enc(out)
+
+        for l in self.blocks:
+            out = l(out)
+        return out
 
 
 class DecoderLayer(nn.Module):
@@ -62,6 +95,20 @@ class TyphoonClassifier(nn.Module):
         x = self.denseint(x)                # [N, d_model, factor]
         x = self.clf(x)
 
+        return x
+
+
+class TyphoonClassifierWithLSTM(nn.Module):
+    def __init__(self, input_features, seq_len, n_heads, factor, num_class, num_layers, d_model=128, dropout_rate=0.2, bidirectional=False):
+        super(TyphoonClassifierWithLSTM, self).__init__()
+        self.encoder = EncoderLayerWithLSTM(input_features, seq_len, n_heads, num_layers, d_model, dropout_rate, bidirectional)
+        self.denseint = modules.DenseInterpolation(seq_len, factor)
+        self.clf = modules.ClassificationModule(d_model, factor, num_class)
+
+    def forward(self, x):
+        x = self.encoder(x)
+        x = self.denseint(x)
+        x = self.clf(x)
         return x
 
 
