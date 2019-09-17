@@ -2,7 +2,7 @@ import os
 import time
 import tqdm
 import pandas as pd
-from comet_ml import Experiment
+from copy import deepcopy
 
 import torch
 import torch.nn as nn
@@ -77,7 +77,7 @@ class NeuralNetworkClassifier:
     ----------------------------------------------------------
 
     """
-    def __init__(self, model, criterion, optimizer, optimizer_config: dict, experiment: Experiment) -> None:
+    def __init__(self, model, criterion, optimizer, optimizer_config: dict, experiment) -> None:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = model.to(self.device)
         self.optimizer = optimizer(self.model.parameters(), **optimizer_config)
@@ -86,6 +86,7 @@ class NeuralNetworkClassifier:
 
         self.hyper_params = optimizer_config
         self._start_epoch = 0
+        self.hyper_params["epochs"] = self._start_epoch
         self.__num_classes = None
         self._is_parallel = False
 
@@ -96,7 +97,7 @@ class NeuralNetworkClassifier:
             notice = "Running on {} GPUs.".format(torch.cuda.device_count())
             print("\033[33m" + notice + "\033[0m")
 
-    def fit(self, loader: dict, epochs: int, checkpoint_path=None) -> None:
+    def fit(self, loader: dict, epochs: int, checkpoint_path: str = None) -> None:
         """
         The method of training your PyTorch Model.
         With the assumption, This method use for training network for classification.
@@ -185,7 +186,7 @@ class NeuralNetworkClassifier:
 
             pbar.close()
 
-    def evaluate(self, loader: DataLoader) -> None:
+    def evaluate(self, loader: DataLoader, verbose: bool = False) -> None or float:
         """
         The method of evaluating your PyTorch Model.
         With the assumption, This method use for training network for classification.
@@ -198,6 +199,7 @@ class NeuralNetworkClassifier:
         ---------------------------------------------------------
 
         :param loader: DataLoader for Evaluating: torch.utils.data.DataLoader
+        :param verbose:
         :return: None
         """
         running_loss = 0.0
@@ -231,8 +233,12 @@ class NeuralNetworkClassifier:
                     self.experiment.log_metric("loss", running_loss)
                     self.experiment.log_metric("accuracy", float(running_corrects / total))
                 pbar.close()
+            acc = self.experiment.get_metric("accuracy")
 
-        print("\033[33m" + "Evaluation finished. Check your workspace" + "\033[0m" + " https://www.comet.ml/")
+        print("\033[33m" + "Evaluation finished. " + "\033[0m" + "Accuracy: {:.4f}".format(acc))
+
+        if verbose:
+            return acc
 
     def save_checkpoint(self) -> dict:
         """
@@ -257,14 +263,14 @@ class NeuralNetworkClassifier:
         """
 
         checkpoints = {
-            "epoch": self.hyper_params["epochs"],
-            "optimizer_state_dict": self.optimizer.state_dict()
+            "epoch": deepcopy(self.hyper_params["epochs"]),
+            "optimizer_state_dict": deepcopy(self.optimizer.state_dict())
         }
 
         if self._is_parallel:
-            checkpoints["model_state_dict"] = self.model.module.state_dict()
+            checkpoints["model_state_dict"] = deepcopy(self.model.module.state_dict())
         else:
-            checkpoints["model_state_dict"] = self.model.state_dict()
+            checkpoints["model_state_dict"] = deepcopy(self.model.state_dict())
 
         return checkpoints
 
@@ -324,7 +330,7 @@ class NeuralNetworkClassifier:
 
         self.optimizer.load_state_dict(checkpoints["optimizer_state_dict"])
 
-    def restore_from_file(self, path: str, map_location="cpu"):
+    def restore_from_file(self, path: str, map_location: str = "cpu"):
         """
         The method of loading trained PyTorch model from file.
 
@@ -469,7 +475,7 @@ class AutoEncoderTrainer(NeuralNetworkClassifier):
 
             pbar.close()
 
-    def evaluate(self, loader: DataLoader) -> None:
+    def evaluate(self, loader: DataLoader, **kwargs) -> None:
         running_loss = 0.0
         pbar = tqdm.tqdm(total=len(loader.dataset))
 
@@ -496,7 +502,7 @@ class AutoEncoderTrainer(NeuralNetworkClassifier):
 
     @property
     def num_class(self) -> int or None:
-        raise Experiment("Unable to set class count")
+        raise Exception("Unable to set class count")
 
     def confusion_matrix(self, dataset: torch.utils.data.Dataset, labels=None, sample_weight=None) -> None:
         raise Exception("Unable to use this method.")
