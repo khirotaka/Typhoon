@@ -14,67 +14,80 @@ from Typhoon.utils.functions import ScheduledOptimizer
 
 class NeuralNetworkClassifier:
     """
-    NeuralNetworkClassifier depend on Comet-ML (https://www.comet.ml/).
-    You have to create a project on your workspace of Comet, if you use this class.
+    | NeuralNetworkClassifier depend on `Comet-ML <https://www.comet.ml/>`_ .
+    | You have to create a project on your workspace of Comet, if you use this class.
+    |
+    | example
 
-    How to use.
-
+    ---------------------
     1st, Write your code.
-    ----------------------------------------------------------
-    # code.py
-    from Typhoon.utils.trainer import NeuralNetworkClassifier
+    ---------------------
+    ::
 
-    import torch
+        # code.py
+        from comet_ml import Experiment
+        import torch
+        import torch.nn as nn
+        import torch.optim as optim
+        from Typhoon.utils.trainer import NeuralNetworkClassifier
 
-    class Network(torch.nn.Module):
-        def __init__(self):
-            super(Network ,self).__init__()
-            ...
-        def forward(self, x):
-            ...
+        class Network(nn.Module):
+           def __init__(self):
+               super(Network ,self).__init__()
+               ...
+           def forward(self, x):
+               ...
 
-    optimizer_config = {"lr": 0.001, "betas": (0.9, 0.999), "eps": 1e-08}
-    comet_config = {}
+        optimizer_config = {"lr": 0.001, "betas": (0.9, 0.999), "eps": 1e-08}
+        comet_config = {}
 
-    train_val_loader = {
-        "train": train_loader,
-        "val": val_loader
-    }
-    test_loader = DataLoader(test_ds, batch_size)
+        train_val_loader = {
+           "train": train_loader,
+           "val": val_loader
+        }
+        test_loader = DataLoader(test_ds, batch_size)
 
-    clf = NeuralNetworkClassifier(
-            Network(), nn.CrossEntropyLoss(),
-            optim.Adam, optimizer_config, Experiment()
-        )
+        clf = NeuralNetworkClassifier(
+                Network(), nn.CrossEntropyLoss(),
+                optim.Adam, optimizer_config, Experiment()
+            )
 
-    clf.experiment_tag = "experiment_tag"
-    clf.num_classes = 3
-    clf.fit(train_val_loader, epochs=10)
-    clf.evaluate(test_loader)
-    clf.confusion_matrix(test_ds)
-    clf.save_weights("save_params_test/")
+        clf.experiment_tag = "experiment_tag"
+        clf.num_classes = 3
+        clf.fit(train_val_loader, epochs=10)
+        clf.evaluate(test_loader)
+        lf.confusion_matrix(test_ds)
+        clf.save_weights("save_params_test/")
 
-    ----------------------------------------------------------
-
+    ----------------------------
     2nd, Run code on your shell.
-    > export COMET_API_KEY="YOUR-API-KEY"
-    > export COMET_PROJECT_NAME="YOUR-PROJECT-NAME"
-    > user@user$ python code.py
+    ----------------------------
+    | You need to define 2 environment variables.
+    | :code:`COMET_API_KEY` & :code:`COMET_PROJECT_NAME`
 
-    ----------------------------------------------------------
+    On Unix-like system, you can define them like this and execute code.
+    ::
 
+        export COMET_API_KEY="YOUR-API-KEY"
+        export COMET_PROJECT_NAME="YOUR-PROJECT-NAME"
+        user@user$ python code.py
+
+    -------------------------------------------
     3rd, check logs on your workspace of comet.
+    -------------------------------------------
+    Just access your `Comet-ML <https://www.comet.ml/>`_ Project page.
 
+    ^^^^^
     Note,
-    Execute this command on your shell,
+    ^^^^^
 
-    > export COMET_DISABLE_AUTO_LOGGING=1
+    Execute this command on your shell, ::
 
-    If the following error occurs.
+        export COMET_DISABLE_AUTO_LOGGING=1
 
-    ImportError: You must import Comet before these modules: torch
+    If the following error occurs. ::
 
-    ----------------------------------------------------------
+        ImportError: You must import Comet before these modules: torch
 
     """
     def __init__(self, model, criterion, optimizer, optimizer_config: dict, experiment) -> None:
@@ -99,24 +112,25 @@ class NeuralNetworkClassifier:
 
     def fit(self, loader: dict, epochs: int, checkpoint_path: str = None) -> None:
         """
-        The method of training your PyTorch Model.
-        With the assumption, This method use for training network for classification.
+        | The method of training your PyTorch Model.
+        | With the assumption, This method use for training network for classification.
 
-        ---------------------------------------------------------
-        train_ds = Subset(train_val_ds, train_index)
-        val_ds = Subset(train_val_ds, val_index)
+        ::
 
-        train_val_loader = {
-            "train": DataLoader(train_ds, batch_size),
-            "val": DataLoader(val_ds, batch_size)
-        }
+            train_ds = Subset(train_val_ds, train_index)
+            val_ds = Subset(train_val_ds, val_index)
 
-        clf = NeuralNetworkClassifier(
-                Network(), nn.CrossEntropyLoss(),
-                optim.Adam, optimizer_config
-            )
-        clf.fit(train_val_loader, epochs=10)
-        ---------------------------------------------------------
+            train_val_loader = {
+                "train": DataLoader(train_ds, batch_size),
+                "val": DataLoader(val_ds, batch_size)
+            }
+
+            clf = NeuralNetworkClassifier(
+                    Network(), nn.CrossEntropyLoss(),
+                    optim.Adam, optimizer_config, experiment
+                )
+            clf.fit(train_val_loader, epochs=10)
+
 
         :param loader: Dictionary which contains Data Loaders for training and validation.: dict{DataLoader, DataLoader}
         :param epochs: The number of epochs: int
@@ -190,16 +204,18 @@ class NeuralNetworkClassifier:
         """
         The method of evaluating your PyTorch Model.
         With the assumption, This method use for training network for classification.
-        ---------------------------------------------------------
-        clf = NeuralNetworkClassifier(
-                Network(), nn.CrossEntropyLoss(),
-                optim.Adam, optimizer_config
-            )
-        clf.evaluate(test_loader)
-        ---------------------------------------------------------
+
+        ::
+
+            clf = NeuralNetworkClassifier(
+                    Network(), nn.CrossEntropyLoss(),
+                    optim.Adam, optimizer_config, experiment
+                )
+            clf.evaluate(test_loader)
+
 
         :param loader: DataLoader for Evaluating: torch.utils.data.DataLoader
-        :param verbose:
+        :param verbose: bool
         :return: None
         """
         running_loss = 0.0
@@ -249,15 +265,15 @@ class NeuralNetworkClassifier:
             - optimizer state as `optimizer_state_dict`
             - model state as `model_state_dict`
 
-        ---------------------------------------------------------
-        clf = NeuralNetworkClassifier(
-                Network(), nn.CrossEntropyLoss(),
-                optim.Adam, optimizer_config
-            )
+        ::
 
-        clf.fit(train_loader, epochs=10)
-        checkpoints = clf.save_checkpoint()
-        ---------------------------------------------------------
+            clf = NeuralNetworkClassifier(
+                    Network(), nn.CrossEntropyLoss(),
+                    optim.Adam, optimizer_config, experiment
+                )
+
+            clf.fit(train_loader, epochs=10)
+            checkpoints = clf.save_checkpoint()
 
         :return: dict {'epoch', 'optimizer_state_dict', 'model_state_dict'}
         """
@@ -276,24 +292,24 @@ class NeuralNetworkClassifier:
 
     def save_to_file(self, path: str) -> str:
         """
-        The method of saving trained PyTorch model to file.
-        Those weights are uploaded to comet.ml as backup.
-        check "Asserts".
+        | The method of saving trained PyTorch model to file.
+        | Those weights are uploaded to comet.ml as backup.
+        | check "Asserts".
 
         Note, .pth file contains
             - the number of last epoch as `epochs`
             - optimizer state as `optimizer_state_dict`
             - model state as `model_state_dict`
 
-        ---------------------------------------------------------
-        clf = NeuralNetworkClassifier(
-                Network(), nn.CrossEntropyLoss(),
-                optim.Adam, optimizer_config
-            )
+        ::
 
-        clf.fit(train_loader, epochs=10)
-        filename = clf.save_to_file('path/to/save/dir/')
-        ---------------------------------------------------------
+            clf = NeuralNetworkClassifier(
+                    Network(), nn.CrossEntropyLoss(),
+                    optim.Adam, optimizer_config, experiment
+                )
+
+            clf.fit(train_loader, epochs=10)
+            filename = clf.save_to_file('path/to/save/dir/')
 
         :param path: path to saving directory. : string
         :return: path to file : string
@@ -330,17 +346,17 @@ class NeuralNetworkClassifier:
 
         self.optimizer.load_state_dict(checkpoints["optimizer_state_dict"])
 
-    def restore_from_file(self, path: str, map_location: str = "cpu"):
+    def restore_from_file(self, path: str, map_location: str = "cpu") -> None:
         """
         The method of loading trained PyTorch model from file.
 
-        ---------------------------------------------------------
-        clf = NeuralNetworkClassifier(
-                Network(), nn.CrossEntropyLoss(),
-                optim.Adam, optimizer_config
-            )
-        clf.restore_from_file('path/to/trained/weights.pth')
-        ---------------------------------------------------------
+        ::
+
+            clf = NeuralNetworkClassifier(
+                    Network(), nn.CrossEntropyLoss(),
+                    optim.Adam, optimizer_config, experiment
+                )
+            clf.restore_from_file('path/to/trained/weights.pth')
 
         :param path: path to saved directory. : str
         :param map_location: default cpu: str
@@ -356,8 +372,10 @@ class NeuralNetworkClassifier:
     @experiment_tag.setter
     def experiment_tag(self, tag: str) -> None:
         """
-        clf = NeuralNetworkClassifier(...)
-        clf.experiment_tag = "tag"
+        ::
+
+            clf = NeuralNetworkClassifier(...)
+            clf.experiment_tag = "tag"
 
         :param tag: str
         :return: None
@@ -377,12 +395,12 @@ class NeuralNetworkClassifier:
 
     def confusion_matrix(self, dataset: torch.utils.data.Dataset, labels=None, sample_weight=None) -> None:
         """
-        Generate confusion matrix.
-        result save on comet.ml.
+        | Generate confusion matrix.
+        | result save on comet.ml.
 
         :param dataset: dataset for generating confusion matrix.
-        :param labels
-        :param sample_weight:
+        :param labels: array, shape = [n_samples]
+        :param sample_weight: array-lie of shape = [n_samples], optional
         :return: None
         """
         targets = []
