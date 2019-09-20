@@ -18,10 +18,14 @@ class EncoderLayer(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         if isinstance(self.transform, nn.RNNBase):
             x, h = self.transform(x)        # [N, seq_len, n_directions * hidden_size]
+        elif isinstance(self.transform, nn.Conv1d):
+            x = x.transpose(1, 2)           # [N, seq_len, features] -> [N, features, seq_len]
+            x = self.transform(x)
+            x = x.transpose(1, 2)           # [N, seq_len, features]
         else:
             x = self.transform(x)           # [N, seq_len, d_model]
 
-        x = self.positional_enc(x)         # [N, seq_len, d_model]
+        x = self.positional_enc(x)          # [N, seq_len, d_model]
 
         for l in self.blocks:
             x = l(x)                        # [N, seq_len, d_model]
