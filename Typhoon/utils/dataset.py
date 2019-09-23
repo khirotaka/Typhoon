@@ -171,8 +171,16 @@ def load_mhealth(items: list, window_size: int, overlap_rate=0.5, drop_null=True
     return data, labels
 
 
+def load_mhealth_v2(items, window_size, overlap_rate, drop_null):
+    data, label = load_mhealth(items, window_size, overlap_rate, drop_null)
+    chest = data[:, :, 0:5]
+    ankle = data[:, :, 5:15]
+    arm = data[:, :, 15:-1]
+    return chest, ankle, arm, label
+
+
 class MHealth(Dataset):
-    def __init__(self, items: list, window_size: int, overlap_rate=0.5, drop_null=True):
+    def __init__(self, items: list, window_size: int, overlap_rate=0.5, drop_null=True) -> None:
         self.data, self.labels = load_mhealth(
             items,
             window_size=window_size,
@@ -188,6 +196,28 @@ class MHealth(Dataset):
 
     def __len__(self):
         return len(self.labels)
+
+
+class MHealthV2(Dataset):
+    def __init__(self, items: list, window_size: int, overlap_rate=0.5, drop_null=True) -> None:
+        self.chest, self.ankle, self.arm, self.label = load_mhealth_v2(
+            items=items,
+            window_size=window_size,
+            overlap_rate=overlap_rate,
+            drop_null=drop_null
+        )
+
+    def __getitem__(self, item):
+        x_chest = self.chest[item]
+        x_ankle = self.ankle[item]
+        x_arm = self.arm[item]
+        y = self.label[item]
+
+        x = [x_chest, x_ankle, x_arm]
+        return x, y
+
+    def __len__(self):
+        return len(self.label)
 
 
 def fetch_epilepsy(extract=True) -> str:
@@ -257,3 +287,45 @@ def load_uwave(train=True):
     data = np.dstack([x_data, y_data, z_data])
     label = pd.get_dummies(x_label).to_numpy().argmax(1)
     return data, label
+
+
+def fetch_natops(extract=True):
+    url = "http://www.timeseriesclassification.com/Downloads/NATOPS.zip"
+    filename = fetch_from_url(url)
+    if extract:
+        with zipfile.ZipFile(filename) as zfile:
+            zfile.extract("NATOPS_TRAIN.ts", SAVE_DIR+"/NAPTOS/")
+            zfile.extract("NATOPS_TEST.ts", SAVE_DIR+"/NAPTOS/")
+
+    os.remove(filename)
+    return SAVE_DIR+"/NAPTOS/"
+
+
+def load_natops(train=True):
+    X = []
+    path = SAVE_DIR+"/NAPTOS/"
+    if not os.path.isdir(path):
+        fetch_natops()
+
+    path = path + "NATOPS_{}.ts".format("TRAIN" if train else "TEST")
+    data, label = load_from_tsfile_to_dataframe(path)          # [180, 24], [180]
+
+    for s in range(data.shape[0]):
+        tmp = [data.iloc[s][c] for c in data.columns]
+        X.append(np.dstack(tmp))
+    X = np.vstack(X)
+    return X, label.astype("float").astype("int")
+
+
+class NATOPS(Dataset):
+    def __init__(self, train: bool = True):
+        self.data, self.label = load_natops(train)
+
+    def __getitem__(self, item):
+        x = self.data[item]
+        y = self.label[item]
+
+        return x, y
+
+    def __len__(self):
+        return len(self.label)
