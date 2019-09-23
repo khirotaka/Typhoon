@@ -43,14 +43,16 @@ class FixedSlidingWindow:
     def __init__(self, window_size: int, overlap_rate=0.5) -> None:
         """
         Fixed sliding window.
-        >>> import numpy as np
-        >>> from Typhoon.utils.functions import FixedSlidingWindow
-        >>> x = np.random.randn(1024, 23)
-        >>> y = np.random.randint(0, 9, 1024)
-        >>> sw = FixedSlidingWindow(256, overlap_rate=0.5)
-        >>> x, y = sw(x, y)
-        >>> x.shape     # [6, 256, 23]
-        >>> y.shape     # [6, ]
+        ::
+
+            import numpy as np
+            from Typhoon.utils.functions import FixedSlidingWindow
+            x = np.random.randn(1024, 23)
+             = np.random.randint(0, 9, 1024)
+            sw = FixedSlidingWindow(256, overlap_rate=0.5)
+            x, y = sw(x, y)
+            x.shape     # [6, 256, 23]
+            y.shape     # [6, ]
 
         :param window_size: int
         :param overlap_rate: float
@@ -94,8 +96,8 @@ class FixedSlidingWindow:
 
 class ScheduledOptimizer:
     """
-    Reference: jadore801120/attention-is-all-you-need-pytorch
-    https://github.com/jadore801120/attention-is-all-you-need-pytorch/blob/master/transformer/Optim.py
+    Reference: `jadore801120/attention-is-all-you-need-pytorch \
+    <https://github.com/jadore801120/attention-is-all-you-need-pytorch/blob/master/transformer/Optim.py>`_
     """
     def __init__(self, optimizer, d_model: int, warm_up: int) -> None:
         self._optimizer = optimizer
