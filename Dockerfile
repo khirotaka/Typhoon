@@ -14,4 +14,5 @@ RUN pip install cython && pip install --user \
     tslearn \
     tqdm
 
-COPY . /workspace/
+COPY . /playground/
+WORKDIR /playground/
