@@ -157,9 +157,9 @@ class NeuralNetworkClassifier:
                 self.model.train()
                 pbar = tqdm.tqdm(total=len_of_train_dataset)
                 for x, y in loader["train"]:
-                    b_size = x.shape[0]
+                    b_size = y.shape[0]
                     total += y.shape[0]
-                    x = x.to(self.device)
+                    x = x.to(self.device) if isinstance(x, torch.Tensor) else [i.to(self.device) for i in x]
                     y = y.to(self.device)
 
                     pbar.set_description(
@@ -187,7 +187,7 @@ class NeuralNetworkClassifier:
                     self.model.eval()
                     for x_val, y_val in loader["val"]:
                         val_total += y_val.shape[0]
-                        x_val = x_val.to(self.device)
+                        x_val = x_val.to(self.device) if isinstance(x_val, torch.Tensor) else [i_val.to(self.device) for i_val in x_val]
                         y_val = y_val.to(self.device)
 
                         val_output = self.model(x_val)
@@ -230,9 +230,9 @@ class NeuralNetworkClassifier:
                 correct = 0.0
                 total = 0.0
                 for step, (x, y) in enumerate(loader):
-                    b_size = x.shape[0]
+                    b_size = y.shape[0]
                     total += y.shape[0]
-                    x = x.to(self.device)
+                    x = x.to(self.device) if isinstance(x, torch.Tensor) else [i.to(self.device) for i in x]
                     y = y.to(self.device)
 
                     pbar.set_description("\033[32m"+"Evaluating"+"\033[0m")
