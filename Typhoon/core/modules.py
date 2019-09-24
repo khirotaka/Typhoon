@@ -85,7 +85,9 @@ class PositionWiseFeedForward(nn.Module):
 class EncoderBlock(nn.Module):
     def __init__(self, embed_dim: int, num_head: int, dropout_rate=0.1) -> None:
         super(EncoderBlock, self).__init__()
-        self.attention = ResidualBlock(nn.MultiheadAttention(embed_dim, num_head), embed_dim, p=dropout_rate)
+        self.attention = ResidualBlock(
+            nn.MultiheadAttention(embed_dim, num_head), embed_dim, p=dropout_rate
+        )
         self.ffn = ResidualBlock(PositionWiseFeedForward(embed_dim), embed_dim, p=dropout_rate)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -163,12 +165,12 @@ class ClassificationModule(nn.Module):
         self.factor = factor
         self.num_class = num_class
 
-        self.fc = nn.Linear(d_model * factor, num_class)
+        self.fc = nn.Linear(int(d_model * factor), num_class)
 
         nn.init.normal_(self.fc.weight, std=0.02)
         nn.init.normal_(self.fc.bias, 0)
 
     def forward(self, x):
-        x = x.contiguous().view(-1, self.factor * self.d_model)
+        x = x.contiguous().view(-1, int(self.factor * self.d_model))
         x = self.fc(x)
         return x
