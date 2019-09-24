@@ -309,12 +309,12 @@ def load_natops(train=True):
 
     path = path + "NATOPS_{}.ts".format("TRAIN" if train else "TEST")
     data, label = load_from_tsfile_to_dataframe(path)          # [180, 24], [180]
-
+    label = label.astype("float").astype("int") - 1
     for s in range(data.shape[0]):
         tmp = [data.iloc[s][c] for c in data.columns]
         X.append(np.dstack(tmp))
-    X = np.vstack(X)
-    return X, label.astype("float").astype("int")
+    X = np.vstack(X).astype(np.float32)
+    return X, label
 
 
 class NATOPS(Dataset):
