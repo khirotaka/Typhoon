@@ -18,6 +18,19 @@ def positional_encoding(n_positions: int, hidden_dim: int) -> torch.Tensor:
     return pos_enc
 
 
+def dense_interpolation(batch_size, seq_len, factor):
+    W = np.zeros((factor, seq_len), dtype=np.float32)
+    for t in range(seq_len):
+        s = np.array((factor * (t + 1)) / seq_len, dtype=np.float32)
+        for m in range(factor):
+            tmp = np.array(1 - (np.abs(s - (1 + m)) / factor), dtype=np.float32)
+            w = np.power(tmp, 2, dtype=np.float32)
+            W[m, t] = w
+
+    W = torch.tensor(W, requires_grad=False).float().unsqueeze(0)
+    return W.repeat(batch_size, 1, 1)
+
+
 def subsequent_mask(size: int) -> torch.Tensor:
     """
     from Harvard NLP
