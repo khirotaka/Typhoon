@@ -110,7 +110,7 @@ class NeuralNetworkClassifier:
             notice = "Running on {} GPUs.".format(torch.cuda.device_count())
             print("\033[33m" + notice + "\033[0m")
 
-    def fit(self, loader: dict, epochs: int, checkpoint_path: str = None) -> None:
+    def fit(self, loader: dict, epochs: int, checkpoint_path: str = None, validation: bool = True) -> None:
         """
         | The method of training your PyTorch Model.
         | With the assumption, This method use for training network for classification.
@@ -135,16 +135,20 @@ class NeuralNetworkClassifier:
         :param loader: Dictionary which contains Data Loaders for training and validation.: dict{DataLoader, DataLoader}
         :param epochs: The number of epochs: int
         :param checkpoint_path: str
+        :param validation:
         :return: None
         """
         len_of_train_dataset = len(loader["train"].dataset)
-        len_of_val_dataset = len(loader["val"].dataset)
         epochs = epochs + self._start_epoch
 
         self.hyper_params["epochs"] = epochs
         self.hyper_params["batch_size"] = loader["train"].batch_size
         self.hyper_params["train_ds_size"] = len_of_train_dataset
-        self.hyper_params["val_ds_size"] = len_of_val_dataset
+
+        if validation:
+            len_of_val_dataset = len(loader["val"].dataset)
+            self.hyper_params["val_ds_size"] = len_of_val_dataset
+
         self.experiment.log_parameters(self.hyper_params)
 
         for epoch in range(self._start_epoch, epochs):
@@ -178,25 +182,25 @@ class NeuralNetworkClassifier:
 
                     self.experiment.log_metric("loss", loss.cpu().item(), step=epoch)
                     self.experiment.log_metric("accuracy", float(correct / total), step=epoch)
+            if validation:
+                with self.experiment.validate():
+                    with torch.no_grad():
+                        val_correct = 0.0
+                        val_total = 0.0
 
-            with self.experiment.validate():
-                with torch.no_grad():
-                    val_correct = 0.0
-                    val_total = 0.0
+                        self.model.eval()
+                        for x_val, y_val in loader["val"]:
+                            val_total += y_val.shape[0]
+                            x_val = x_val.to(self.device) if isinstance(x_val, torch.Tensor) else [i_val.to(self.device) for i_val in x_val]
+                            y_val = y_val.to(self.device)
 
-                    self.model.eval()
-                    for x_val, y_val in loader["val"]:
-                        val_total += y_val.shape[0]
-                        x_val = x_val.to(self.device) if isinstance(x_val, torch.Tensor) else [i_val.to(self.device) for i_val in x_val]
-                        y_val = y_val.to(self.device)
+                            val_output = self.model(x_val)
+                            val_loss = self.criterion(val_output, y_val)
+                            _, val_pred = torch.max(val_output, 1)
+                            val_correct += (val_pred == y_val).sum().float().cpu().item()
 
-                        val_output = self.model(x_val)
-                        val_loss = self.criterion(val_output, y_val)
-                        _, val_pred = torch.max(val_output, 1)
-                        val_correct += (val_pred == y_val).sum().float().cpu().item()
-
-                        self.experiment.log_metric("loss", val_loss.cpu().item(), step=epoch)
-                        self.experiment.log_metric("accuracy", float(val_correct / val_total), step=epoch)
+                            self.experiment.log_metric("loss", val_loss.cpu().item(), step=epoch)
+                            self.experiment.log_metric("accuracy", float(val_correct / val_total), step=epoch)
 
             pbar.close()
 
